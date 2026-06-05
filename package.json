@@ -1,0 +1,13 @@
+{
+  "name": "cloudflare-preferred-panel",
+  "version": "0.1.0",
+  "description": "A compact Cloudflare management panel for DNS, Workers, Pages, D1, R2, KV, Tunnels, and acceleration workflows.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "test": "node --test test/**/*.test.js"
+  }
+}

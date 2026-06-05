@@ -1,0 +1,113 @@
+.primary-button,
+.secondary-button,
+.ghost-button,
+.back-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.primary-button {
+  min-width: 120px;
+  height: 36px;
+  gap: 8px;
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.primary-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.gradient-button {
+  min-width: 180px;
+  height: 54px;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  box-shadow: 0 16px 32px rgba(67, 119, 232, 0.24);
+  font-size: 16px;
+}
+
+.secondary-button {
+  height: 36px;
+  gap: 8px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.secondary-button:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.ghost-button {
+  height: 36px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 14px;
+}
+
+.danger-button {
+  min-width: 92px;
+  height: 36px;
+  border: 0;
+  background: var(--danger-soft);
+  color: #fff;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.back-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #687080;
+}
+
+.icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.copy-button {
+  cursor: pointer;
+}
+
+.quiet {
+  cursor: default;
+}

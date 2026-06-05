@@ -1,0 +1,449 @@
+.devres-content {
+  width: min(100%, 1180px);
+}
+
+.devres-scroll-shell {
+  display: grid;
+  max-height: calc(100vh - 96px);
+  gap: 12px;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.devres-card,
+.devres-dialog {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.devres-toolbar,
+.devres-card-heading,
+.devres-row,
+.devres-row-title,
+.devres-row-meta,
+.devres-toolbar-actions,
+.devres-dialog-header,
+.devres-dialog-actions,
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.devres-toolbar,
+.devres-card-heading,
+.devres-row,
+.devres-dialog-header,
+.devres-dialog-actions {
+  justify-content: space-between;
+}
+
+.devres-toolbar {
+  padding: 16px;
+}
+
+.devres-toolbar h2,
+.devres-card-heading h2,
+.devres-dialog-header h2,
+.template-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.devres-toolbar p,
+.devres-card-heading p,
+.devres-dialog-header p,
+.devres-row-main > p,
+.template-card p,
+.devres-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.devres-toolbar-actions {
+  justify-content: flex-end;
+}
+
+.devres-toolbar-actions select,
+.devres-field input,
+.devres-field select,
+.devres-field textarea {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.devres-toolbar-actions select {
+  width: 188px;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.devres-field input,
+.devres-field select {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.devres-field textarea {
+  min-height: 220px;
+  resize: vertical;
+  padding: 10px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.devres-primary-button,
+.devres-outline-button,
+.devres-danger-button {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.devres-primary-button {
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+}
+
+.devres-outline-button {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+}
+
+.devres-danger-button {
+  border: 0;
+  background: var(--danger);
+  color: #fff;
+}
+
+.devres-primary-button:disabled,
+.devres-outline-button:disabled,
+.devres-danger-button:disabled,
+.devres-icon-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.devres-primary-button svg,
+.devres-outline-button svg,
+.devres-danger-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.devres-notice {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 10px 12px;
+}
+
+.devres-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.devres-summary-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px 14px;
+}
+
+.devres-summary-card span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.devres-summary-card strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devres-list-card {
+  overflow: hidden;
+}
+
+.devres-card-heading {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 16px;
+}
+
+.devres-list {
+  display: grid;
+}
+
+.devres-row {
+  min-height: 82px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.devres-row:last-child {
+  border-bottom: 0;
+}
+
+.devres-row-main {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 6px;
+}
+
+.devres-row-title {
+  justify-content: flex-start;
+}
+
+.devres-row-title strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devres-row-title em {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 15px;
+  padding: 2px 8px;
+}
+
+.devres-row-icon,
+.devres-empty-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.devres-row-icon svg,
+.devres-empty-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.devres-row-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.devres-row-meta span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.devres-icon-danger {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+}
+
+.devres-icon-danger svg {
+  width: 14px;
+  height: 14px;
+}
+
+.devres-empty {
+  display: grid;
+  min-height: 210px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.devres-empty strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.devres-dialog-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  place-items: center;
+  background: rgb(15 23 42 / 0.38);
+  padding: 24px;
+}
+
+.devres-dialog {
+  display: grid;
+  width: min(560px, 100%);
+  gap: 14px;
+  padding: 16px;
+}
+
+.devres-dialog-header {
+  align-items: flex-start;
+}
+
+.devres-dialog-close {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+}
+
+.devres-dialog-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.devres-field {
+  display: grid;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.devres-delete-dialog {
+  width: min(520px, 100%);
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.template-card {
+  display: grid;
+  min-height: 260px;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.template-card > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.template-card span {
+  width: max-content;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+  padding: 2px 8px;
+}
+
+.template-card pre {
+  overflow: hidden;
+  min-height: 96px;
+  max-height: 118px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.template-actions {
+  align-self: end;
+  justify-content: space-between;
+}
+
+.template-dialog {
+  width: min(720px, 100%);
+}
+
+@media (max-width: 1180px) {
+  .devres-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .devres-toolbar,
+  .devres-row,
+  .devres-dialog-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .devres-toolbar-actions,
+  .devres-toolbar-actions select,
+  .devres-primary-button,
+  .devres-outline-button,
+  .devres-danger-button {
+    width: 100%;
+  }
+
+  .devres-summary-grid,
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+}

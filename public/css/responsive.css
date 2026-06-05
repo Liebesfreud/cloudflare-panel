@@ -1,0 +1,203 @@
+@media (max-width: 900px) {
+  body {
+    min-width: 0;
+  }
+
+  #app {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    height: auto;
+    border-right: 0;
+  }
+
+  .brand {
+    height: 72px;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    overflow: auto;
+    padding: 8px 12px 14px;
+  }
+
+  .zone-nav-block {
+    margin-top: 0;
+    padding: 10px 12px 14px;
+  }
+
+  .zone-switcher {
+    min-height: 42px;
+    padding: 0 8px 10px;
+  }
+
+  .zone-nav {
+    display: flex;
+    overflow: auto;
+  }
+
+  .zone-nav-item {
+    flex: 0 0 auto;
+  }
+
+  .nav-item {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .topbar {
+    height: 76px;
+    padding: 0 20px;
+  }
+
+  .title-wrap {
+    gap: 14px;
+  }
+
+  .content {
+    width: auto;
+    margin: 16px 12px 42px;
+  }
+
+  .add-panel,
+  .list-panel,
+  .zone-summary-panel,
+  .dns-form-panel,
+  .dns-records-panel {
+    padding: 22px 18px;
+  }
+
+  .add-row,
+  .dns-toolbar,
+  .dns-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content-field,
+  .comment-field {
+    grid-column: auto;
+  }
+
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+  }
+
+  .zone-header,
+  .dns-header {
+    display: none;
+  }
+
+  .zone-row,
+  .dns-row {
+    grid-template-columns: 1fr;
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .dns-row {
+    align-items: start;
+  }
+
+  .zone-id {
+    align-items: flex-start;
+  }
+
+  .zone-summary-panel,
+  .dns-form-heading,
+  .dns-record-title,
+  .selected-counter {
+    align-items: flex-start;
+  }
+
+  .zone-summary-title,
+  .zone-meta-row,
+  .dns-form-heading,
+  .dns-record-title,
+  .selected-counter,
+  .form-actions {
+    display: grid;
+  }
+
+  .zone-id-large {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .dns-form-heading h2 {
+    font-size: 26px;
+  }
+
+  .gradient-button,
+  .reset-button {
+    width: 100%;
+  }
+
+  .connect-section {
+    padding: 34px 16px 24px;
+  }
+
+  .connect-heading h2 {
+    font-size: 30px;
+  }
+
+  .saved-account,
+  .feature-hero-panel,
+  .firewall-rules-heading,
+  .firewall-rule-card {
+    display: grid;
+  }
+
+  .feature-field-grid,
+  .analytics-main-grid,
+  .analytics-cache-grid,
+  .analytics-two-column,
+  .analytics-distribution-grid,
+  .firewall-form,
+  .purge-url-form,
+  .cache-level-list {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-top-row,
+  .analytics-original-heading,
+  .analytics-daily-row,
+  .analytics-rank-row > div:first-child {
+    display: grid;
+  }
+
+  .analytics-range-actions {
+    justify-content: start;
+  }
+
+  .analytics-back-button,
+  .analytics-refresh-main,
+  .analytics-range-button {
+    width: 100%;
+  }
+
+  .analytics-main-metric strong,
+  .analytics-small-card strong {
+    font-size: 24px;
+  }
+
+  .feature-hero-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .firewall-heading-actions {
+    display: grid;
+    width: 100%;
+  }
+
+  .firewall-rule-actions {
+    justify-content: start;
+  }
+}

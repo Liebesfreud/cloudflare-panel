@@ -1,0 +1,33 @@
+.status-pill,
+.plan-pill,
+.type-pill,
+.proxy-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.status-pill,
+.plan-pill {
+  min-height: 24px;
+  font-size: 13px;
+  padding: 0 9px;
+}
+
+.status-pill.active {
+  background: var(--green-weak);
+  color: var(--green);
+}
+
+.status-pill.pending {
+  background: var(--orange-weak);
+  color: #a15c00;
+}
+
+.plan-pill {
+  background: var(--blue-weak);
+  color: var(--blue);
+}

@@ -1,0 +1,82 @@
+.add-panel {
+  padding: 28px 43px;
+}
+
+.list-panel {
+  margin-top: 28px;
+  padding: 29px 43px 38px;
+}
+
+.add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 9px;
+  margin-top: 28px;
+}
+
+.zone-table {
+  margin-top: 24px;
+}
+
+.zone-header,
+.zone-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.1fr) 150px minmax(300px, 2fr) 110px 34px;
+  align-items: center;
+  column-gap: 16px;
+}
+
+.zone-header {
+  min-height: 33px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 9px 7px;
+}
+
+.zone-row {
+  min-height: 48px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+}
+
+.zone-row-button {
+  width: 100%;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.zone-row-button:hover {
+  border-color: #cfd6e2;
+  background: #fbfcfe;
+}
+
+.zone-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-id {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.zone-id span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

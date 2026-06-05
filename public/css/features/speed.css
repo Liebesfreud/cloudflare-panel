@@ -1,0 +1,798 @@
+.speed-content {
+  width: min(100%, 1280px);
+}
+
+.speed-shell {
+  width: min(100%, 672px);
+  margin: 0 auto;
+}
+
+.speed-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.speed-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 20px -2px rgb(104 113 130 / 0.08);
+}
+
+.speed-config-card,
+.speed-state-card,
+.speed-complete-card {
+  padding: 16px;
+}
+
+.speed-gradient-title {
+  margin: 0 0 16px;
+  background: linear-gradient(90deg, var(--blue), #0ea5e9);
+  color: transparent;
+  background-clip: text;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  -webkit-background-clip: text;
+}
+
+.speed-form-stack,
+.speed-deploy-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.speed-deploy-stack {
+  gap: 16px;
+}
+
+.speed-field {
+  display: block;
+  min-width: 0;
+}
+
+.speed-field span {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+.speed-field input,
+.speed-field select {
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  padding: 0 12px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.speed-field select {
+  cursor: pointer;
+}
+
+.speed-field input:focus,
+.speed-field select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgb(67 119 232 / 0.18);
+}
+
+.speed-field input::placeholder {
+  color: #8b95a5;
+}
+
+.speed-field small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.speed-outline-button,
+.speed-primary-button,
+.speed-danger-button,
+.speed-gradient-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 36px;
+  gap: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  padding: 0 12px;
+  text-decoration: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.speed-toolbar-button,
+.speed-refresh-button {
+  height: 32px;
+  gap: 8px;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.speed-outline-button {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.speed-outline-button:hover {
+  background: #f3f4f6;
+}
+
+.speed-outline-button:disabled,
+.speed-gradient-button:disabled,
+.speed-primary-button:disabled,
+.speed-danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.speed-outline-button svg,
+.speed-primary-button svg,
+.speed-danger-button svg,
+.speed-gradient-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.speed-primary-button,
+.speed-gradient-button {
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+}
+
+.speed-danger-button {
+  border: 0;
+  background: var(--danger);
+  color: #fff;
+}
+
+.speed-gradient-button {
+  background: linear-gradient(90deg, var(--blue), #0ea5e9);
+  box-shadow: 0 10px 40px -10px rgb(67 119 232 / 0.3);
+}
+
+.speed-gradient-button:hover,
+.speed-primary-button:hover,
+.speed-danger-button:hover {
+  opacity: 0.9;
+}
+
+.speed-full-button {
+  width: 100%;
+}
+
+.speed-grow-button {
+  flex: 1 1 0;
+}
+
+.speed-notice {
+  margin-bottom: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  padding: 10px 12px;
+}
+
+.speed-summary-box,
+.speed-success-summary {
+  border-radius: 8px;
+  background: #f3f4f6;
+  padding: 12px;
+}
+
+.speed-summary-box h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.speed-summary-list {
+  display: grid;
+  gap: 4px;
+}
+
+.speed-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.speed-summary-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-progress-box {
+  border: 1px solid rgb(67 119 232 / 0.2);
+  border-radius: 8px;
+  background: rgb(67 119 232 / 0.05);
+  padding: 16px;
+}
+
+.speed-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.speed-progress-heading h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.speed-progress-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.speed-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.speed-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 220ms ease;
+}
+
+.speed-action-grid {
+  display: flex;
+  gap: 8px;
+}
+
+.speed-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(255 255 255 / 0.42);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: spin 720ms linear infinite;
+}
+
+.speed-complete-card {
+  text-align: center;
+}
+
+.speed-success-icon {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), #0ea5e9);
+  color: #fff;
+  box-shadow: 0 10px 40px -10px rgb(67 119 232 / 0.3);
+}
+
+.speed-success-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.speed-complete-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+}
+
+.speed-complete-card p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.speed-success-summary {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.speed-success-row {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.speed-success-row span {
+  color: var(--muted);
+}
+
+.speed-success-row a,
+.speed-success-row strong {
+  color: var(--blue);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.speed-success-row a:hover {
+  text-decoration: underline;
+}
+
+.speed-dialog-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(15 23 42 / 0.44);
+  padding: 24px;
+}
+
+.speed-nested-dialog-backdrop {
+  z-index: 60;
+  background: rgb(15 23 42 / 0.28);
+}
+
+.speed-dialog {
+  width: min(100%, 425px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  padding: 24px;
+}
+
+.speed-dialog-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.speed-dialog-heading h2,
+.speed-domains-modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.speed-dialog-heading h2 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--blue);
+}
+
+.speed-dialog-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.speed-dialog-alert {
+  margin-top: 16px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  padding: 8px 10px;
+}
+
+.speed-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.speed-dialog-footer p {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.speed-dialog-footer a {
+  color: var(--blue);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.speed-dialog-footer a:hover {
+  text-decoration: underline;
+}
+
+.speed-dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.speed-dialog-button {
+  height: 36px;
+}
+
+.speed-delete-dialog {
+  width: min(100%, 512px);
+}
+
+.speed-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.speed-domains-dialog {
+  width: min(100%, 896px);
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.speed-domains-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.speed-dialog-close {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.speed-dialog-close:hover {
+  background: #f3f4f6;
+  color: var(--text);
+}
+
+.speed-dialog-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.speed-domains-card {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.speed-domains-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 20px;
+}
+
+.speed-domains-card-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.speed-domains-card-header h3 svg {
+  width: 20px;
+  height: 20px;
+}
+
+.speed-domains-card-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.speed-domains-card-body {
+  padding-top: 0;
+}
+
+.speed-domains-empty {
+  display: grid;
+  min-height: 104px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.speed-domains-empty strong {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.speed-domains-empty p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.speed-domains-empty-simple {
+  min-height: 88px;
+}
+
+.speed-domain-list {
+  display: grid;
+  gap: 8px;
+}
+
+.speed-domain-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.speed-domain-row:hover {
+  background: #f9fafb;
+  border-color: var(--line-strong);
+}
+
+.speed-domain-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.speed-domain-titleline {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.speed-domain-titleline strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-domain-titleline span {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 2px 8px;
+}
+
+.speed-domain-main small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-domain-delete {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.speed-domain-delete:hover {
+  background: var(--danger-weak);
+}
+
+.speed-domain-delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+.speed-domains-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.speed-guide-card {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 20px -2px rgb(104 113 130 / 0.08);
+  padding: 20px 24px 24px;
+}
+
+.speed-guide-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.speed-guide-card h2 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.speed-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.speed-guide-item {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.speed-guide-item h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.speed-guide-item h3 span {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(67 119 232 / 0.1);
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.speed-guide-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .speed-content {
+    width: auto;
+  }
+
+  .speed-toolbar,
+  .speed-action-grid,
+  .speed-dialog-footer,
+  .speed-dialog-actions,
+  .speed-delete-actions,
+  .speed-domain-row,
+  .speed-guide-grid {
+    display: grid;
+  }
+
+  .speed-domains-card-header,
+  .speed-domains-modal-header {
+    align-items: start;
+  }
+
+  .speed-guide-card {
+    padding: 16px;
+  }
+
+  .speed-guide-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .speed-outline-button,
+  .speed-primary-button,
+  .speed-danger-button,
+  .speed-gradient-button {
+    width: 100%;
+  }
+
+  .speed-summary-row {
+    display: grid;
+    gap: 2px;
+  }
+
+  .speed-summary-row strong {
+    text-align: left;
+  }
+}

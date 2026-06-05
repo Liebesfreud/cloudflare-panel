@@ -1,0 +1,140 @@
+.dns-form-panel {
+  margin-top: 18px;
+  padding: 24px 28px 26px;
+}
+
+.dns-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dns-form-heading h2 {
+  margin-top: 2px;
+  font-size: 20px;
+  line-height: 1.22;
+}
+
+.section-kicker {
+  display: block;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.dns-form-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.content-field,
+.comment-field {
+  grid-column: 1 / -1;
+}
+
+.option-field {
+  min-width: 0;
+}
+
+.muted-field {
+  opacity: 0.58;
+}
+
+.muted-field input:disabled {
+  cursor: not-allowed;
+}
+
+.proxy-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  min-height: 60px;
+  gap: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #f7f9fd;
+  cursor: pointer;
+  padding: 12px 14px;
+}
+
+.proxy-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.toggle-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #d6dce7;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.toggle-track::after {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(16, 24, 40, 0.24);
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.proxy-toggle input:checked + .toggle-track {
+  background: var(--orange);
+  box-shadow: 0 0 0 4px rgba(242, 140, 40, 0.14);
+}
+
+.proxy-toggle input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+.proxy-toggle strong,
+.proxy-toggle em {
+  display: block;
+}
+
+.proxy-toggle strong {
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.proxy-toggle em {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.proxy-toggle.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.reset-button {
+  min-width: 118px;
+  height: 40px;
+}
