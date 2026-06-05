@@ -2722,3 +2722,32 @@ rg -n 'src="/|href="/assets|href="/styles|src="/app|url\(/' public .github/workf
 
 - GitHub Pages 只能托管静态文件。当前 `public/` 前端会被发布到 Pages，但 Cloudflare 管理 API 仍依赖 Node.js 服务端，Pages 站点本身不能直接执行真实管理功能。
 - 部署后需要在 GitHub Pages 设置里把 source 指向 `pages` 分支根目录。若仓库未开启 Pages，需通过 GitHub API 或仓库设置启用。
+
+## 2026-06-05 修复 GitHub Pages 样式丢失
+
+用户反馈 `https://baize-projects.github.io/network/` 打开后样式丢失。排查后确认 `public/index.html` 已改成相对资源路径，但 CSS 聚合文件内部仍使用根路径 `@import url("/css/...")`，在 GitHub Pages 项目路径 `/network/` 下会请求到站点根目录 `/css/...`，导致后续样式文件 404。
+
+修复内容：
+
+- `public/styles.css`
+  - 所有 `@import url("/css/...")` 改为 `@import url("./css/...")`。
+- `public/css/dns.css`
+  - DNS 子样式从 `/css/dns/...` 改为 `./dns/...`。
+- `public/css/components.css`
+  - 组件子样式从 `/css/components/...` 改为 `./components/...`。
+- `public/css/zone.css`
+  - 单域名管理子样式从 `/css/zone/...` 改为 `./zone/...`。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+rg -n '@import url\("/|href="/assets|href="/styles|src="/app|src="/' public .github README.md HANDOFF.md
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 30 项全部通过。
+- CSS 和入口静态资源扫描确认没有影响 GitHub Pages 子路径的绝对引用。

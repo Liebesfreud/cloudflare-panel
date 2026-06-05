@@ -1,4 +1,4 @@
-@import url("/css/dns/summary.css");
-@import url("/css/dns/toolbar.css");
-@import url("/css/dns/form.css");
-@import url("/css/dns/records.css");
+@import url("./dns/summary.css");
+@import url("./dns/toolbar.css");
+@import url("./dns/form.css");
+@import url("./dns/records.css");

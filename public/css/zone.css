@@ -1,7 +1,7 @@
-@import url("/css/zone/navigation.css");
-@import url("/css/zone/settings.css");
-@import url("/css/zone/analytics.css");
-@import url("/css/zone/cache.css");
-@import url("/css/zone/firewall.css");
-@import url("/css/zone/page-rules.css");
-@import url("/css/zone/certificates.css");
+@import url("./zone/navigation.css");
+@import url("./zone/settings.css");
+@import url("./zone/analytics.css");
+@import url("./zone/cache.css");
+@import url("./zone/firewall.css");
+@import url("./zone/page-rules.css");
+@import url("./zone/certificates.css");
