@@ -305,6 +305,148 @@ test("reports credential status without exposing the Global API Key", async () =
   }
 });
 
+test("stores browser credential logins in HttpOnly session cookies without exposing keys", async () => {
+  const requests = [];
+  const cloudflareMock = createServer((request, response) => {
+    const url = new URL(request.url, "http://127.0.0.1");
+    requests.push({
+      email: request.headers["x-auth-email"],
+      key: request.headers["x-auth-key"],
+      path: url.pathname,
+    });
+
+    if (request.method === "GET" && url.pathname === "/zones") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          success: true,
+          errors: [],
+          messages: [],
+          result: [makeZone({ id: "cookie-zone" })],
+          result_info: { page: 1, per_page: 50, total_pages: 1, total_count: 1 },
+        })
+      );
+      return;
+    }
+
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ success: false, errors: [{ message: "not found" }] }));
+  });
+
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = 3216;
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "",
+    CLOUDFLARE_GLOBAL_API_KEY: "",
+    CF_EMAIL: "",
+    CF_GLOBAL_API_KEY: "",
+    CLOUDFLARE_API_KEY: "",
+    CF_API_KEY: "",
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+    SESSION_TTL_DAYS: "30",
+    SECURE_COOKIES: "false",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const initialStatusResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/status`
+    );
+    const initialStatusPayload = await initialStatusResponse.json();
+
+    assert.equal(initialStatusResponse.status, 200);
+    assert.equal(initialStatusPayload.hasCredentials, false);
+
+    const connectResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/connect`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "operator@example.com",
+          globalApiKey: "runtime-secret-key",
+        }),
+      }
+    );
+    const connectPayload = await connectResponse.json();
+    const setCookie = connectResponse.headers.get("set-cookie") || "";
+    const sessionCookie = setCookie.split(";")[0];
+
+    assert.equal(connectResponse.status, 200);
+    assert.equal(connectPayload.hasCredentials, true);
+    assert.equal(connectPayload.email, "op******@example.com");
+    assert.equal(connectPayload.source, "cookie");
+    assert.match(connectPayload.expiresAt, /T/);
+    assert.match(setCookie, /cf_panel_session=/);
+    assert.match(setCookie, /Max-Age=2592000/);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Lax/);
+    assert.equal(setCookie.includes("runtime-secret-key"), false);
+    assert.equal(setCookie.includes("operator@example.com"), false);
+    assert.equal(JSON.stringify(connectPayload).includes("runtime-secret-key"), false);
+
+    const cookieStatusResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/status`,
+      {
+        headers: { Cookie: sessionCookie },
+      }
+    );
+    const cookieStatusPayload = await cookieStatusResponse.json();
+
+    assert.equal(cookieStatusResponse.status, 200);
+    assert.equal(cookieStatusPayload.hasCredentials, true);
+    assert.equal(cookieStatusPayload.email, "op******@example.com");
+    assert.equal(cookieStatusPayload.source, "cookie");
+    assert.equal(JSON.stringify(cookieStatusPayload).includes("runtime-secret-key"), false);
+
+    const zonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const zonesPayload = await zonesResponse.json();
+
+    assert.equal(zonesResponse.status, 200);
+    assert.equal(zonesPayload.zones[0].id, "cookie-zone");
+    assert.deepEqual(
+      requests.map((request) => [request.path, request.email, request.key]),
+      [["/zones", "operator@example.com", "runtime-secret-key"]]
+    );
+
+    const noCookieZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`);
+    const noCookieZonesPayload = await noCookieZonesResponse.json();
+
+    assert.equal(noCookieZonesResponse.status, 412);
+    assert.match(noCookieZonesPayload.error, /CLOUDFLARE_EMAIL/);
+
+    const logoutResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/logout`, {
+      method: "POST",
+      headers: { Cookie: sessionCookie },
+    });
+    const logoutPayload = await logoutResponse.json();
+    const clearCookie = logoutResponse.headers.get("set-cookie") || "";
+
+    assert.equal(logoutResponse.status, 200);
+    assert.equal(logoutPayload.ok, true);
+    assert.match(clearCookie, /cf_panel_session=/);
+    assert.match(clearCookie, /Max-Age=0/);
+
+    const revokedStatusResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/status`,
+      {
+        headers: { Cookie: sessionCookie },
+      }
+    );
+    const revokedStatusPayload = await revokedStatusResponse.json();
+
+    assert.equal(revokedStatusResponse.status, 200);
+    assert.equal(revokedStatusPayload.hasCredentials, false);
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
 test("manages DNS records through Cloudflare DNS records API", async () => {
   const zoneId = "a".repeat(32);
   const recordId = "b".repeat(32);

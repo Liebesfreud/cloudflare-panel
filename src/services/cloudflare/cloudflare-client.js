@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { HttpError } from "../../lib/http-error.js";
 
 export class CloudflareClient {
@@ -7,6 +9,7 @@ export class CloudflareClient {
     this.globalApiKey = globalApiKey;
     this.requestTimeoutMs = requestTimeoutMs;
     this.fetchImpl = fetchImpl;
+    this.credentialContext = new AsyncLocalStorage();
   }
 
   setCredentials({ email, globalApiKey }) {
@@ -14,8 +17,44 @@ export class CloudflareClient {
     this.globalApiKey = globalApiKey;
   }
 
-  hasCredentials() {
+  getBaseCredentials() {
+    return {
+      email: this.email,
+      globalApiKey: this.globalApiKey,
+    };
+  }
+
+  hasBaseCredentials() {
     return Boolean(this.email && this.globalApiKey);
+  }
+
+  getCredentials() {
+    const scopedCredentials = this.credentialContext.getStore();
+
+    if (scopedCredentials?.email && scopedCredentials?.globalApiKey) {
+      return scopedCredentials;
+    }
+
+    return this.getBaseCredentials();
+  }
+
+  withCredentials(credentials, callback) {
+    if (!credentials?.email || !credentials?.globalApiKey) {
+      return callback();
+    }
+
+    return this.credentialContext.run(
+      {
+        email: credentials.email,
+        globalApiKey: credentials.globalApiKey,
+      },
+      callback
+    );
+  }
+
+  hasCredentials() {
+    const credentials = this.getCredentials();
+    return Boolean(credentials.email && credentials.globalApiKey);
   }
 
   async get(path, searchParams = {}) {
@@ -259,9 +298,10 @@ export class CloudflareClient {
     const timeout = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
 
     try {
+      const credentials = this.getCredentials();
       const requestHeaders = {
-        "X-Auth-Email": this.email,
-        "X-Auth-Key": this.globalApiKey,
+        "X-Auth-Email": credentials.email,
+        "X-Auth-Key": credentials.globalApiKey,
         ...headers,
       };
 

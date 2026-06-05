@@ -212,6 +212,15 @@ export function bindEvents(actions) {
   document
     .querySelector("#automation-refresh")
     ?.addEventListener("click", actions.loadAutomationState);
+  document
+    .querySelector("#history-refresh")
+    ?.addEventListener("click", actions.loadOperationHistory);
+  document
+    .querySelector("#history-clear")
+    ?.addEventListener("click", actions.clearOperationHistory);
+  document.querySelectorAll("[data-history-filter]").forEach((input) => {
+    input.addEventListener("change", actions.changeOperationHistoryFilter);
+  });
   document.querySelectorAll("[data-automation-setting]").forEach((input) => {
     const handler =
       input.dataset.automationSetting === "securityLevel"

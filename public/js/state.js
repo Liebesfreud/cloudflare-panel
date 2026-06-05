@@ -11,6 +11,8 @@ export const state = {
   connected: false,
   sessionEmail: "",
   sessionHasServerCredentials: false,
+  sessionExpiresAt: "",
+  sessionSource: "",
   sessionError: "",
   mainSection: "domain",
   view: "domains",
@@ -139,11 +141,23 @@ export const state = {
   workerTemplates: [],
   workerTemplateModal: "",
   workerTemplateNotice: "",
+  operationHistory: [],
+  operationHistoryFilters: {
+    modules: [],
+    statuses: [],
+  },
+  operationHistoryLoading: false,
+  operationHistoryNotice: "",
+  operationHistoryModule: "",
+  operationHistoryStatus: "",
+  operationHistoryLimit: "80",
 };
 
 export function resetSessionState() {
   state.connected = false;
   state.sessionError = "";
+  state.sessionExpiresAt = "";
+  state.sessionSource = "";
   state.mainSection = "domain";
   state.view = "domains";
   state.zoneSection = "dns";
@@ -174,6 +188,7 @@ export function resetSessionState() {
   resetAutomationState();
   resetWorkersState();
   resetDeveloperResourcesState();
+  resetOperationHistoryState();
 }
 
 export function resetDnsForm() {
@@ -272,4 +287,17 @@ export function resetDeveloperResourcesState() {
   state.workerTemplates = [];
   state.workerTemplateModal = "";
   state.workerTemplateNotice = "";
+}
+
+export function resetOperationHistoryState() {
+  state.operationHistory = [];
+  state.operationHistoryFilters = {
+    modules: [],
+    statuses: [],
+  };
+  state.operationHistoryLoading = false;
+  state.operationHistoryNotice = "";
+  state.operationHistoryModule = "";
+  state.operationHistoryStatus = "";
+  state.operationHistoryLimit = "80";
 }

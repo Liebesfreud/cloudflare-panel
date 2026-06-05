@@ -53,6 +53,7 @@ export function createConfig(env = process.env) {
   return {
     server: {
       port: parsePort(env.PORT, 3000),
+      secureCookies: env.NODE_ENV === "production" || env.SECURE_COOKIES === "true",
     },
     cloudflare: {
       apiBaseUrl: env.CLOUDFLARE_API_BASE_URL || "https://api.cloudflare.com/client/v4",
@@ -65,6 +66,9 @@ export function createConfig(env = process.env) {
         "",
       requestTimeoutMs: parsePositiveNumber(env.CLOUDFLARE_REQUEST_TIMEOUT_MS, 15_000),
       zonesPerPage: 50,
+    },
+    session: {
+      ttlDays: parsePositiveNumber(env.SESSION_TTL_DAYS, 30),
     },
   };
 }

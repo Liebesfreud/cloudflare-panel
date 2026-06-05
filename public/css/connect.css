@@ -150,6 +150,28 @@
   font-size: 12px !important;
 }
 
+.connect-security {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 10px 12px;
+}
+
+.connect-security strong {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connect-security span {
+  color: #15803d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .connect-submit {
   width: 100%;
   height: 42px;

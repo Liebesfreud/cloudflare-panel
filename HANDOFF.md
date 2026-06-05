@@ -2442,3 +2442,283 @@ git diff --check
 - 本轮浏览器验收只读，不提交 Cloudflare 写操作表单。
 - `.env`、`.env.*`、根目录截图继续被 `.gitignore` 排除。
 - 提交前需要继续确认不暂存真实 Cloudflare 凭据或私钥。
+
+## 2026-06-05 操作历史实现
+
+用户要求把侧栏“操作历史”做成可用功能。本次实现为服务端内存审计日志，所有面板内 `POST/PATCH/PUT/DELETE` 写操作统一经过 API 路由审计，不需要在每个控制器里重复记录。
+
+后端新增/扩展：
+
+- `src/services/operation-history-service.js`
+  - 新增内存操作历史服务，默认最多保留 300 条。
+  - 自动识别模块：DNS 记录、SSL/TLS、缓存管理、防火墙、页面规则、证书管理、一键加速、自动优化、Workers、Pages、D1、R2、KV、Tunnels、账号连接。
+  - 记录字段包含：时间、方法、动作、模块、路径、资源、状态、HTTP 状态码、耗时、错误信息。
+  - 不保存请求体，避免证书私钥、Worker Secret、Global API Key 等敏感字段进入历史。
+  - 修复 `limit` 为空时被 `Number(null)` 压成 1 的边界，空值现在走默认 80。
+- `src/controllers/operation-history-controller.js`
+  - 新增 `GET /api/operation-history`，支持 `module/status/limit` 筛选。
+  - 新增 `DELETE /api/operation-history` 清空当前服务进程内历史。
+- `src/routes/api-routes.js`
+  - 写接口统一包裹审计逻辑。
+  - 成功和失败都会记录。
+  - `/api/operation-history` 自身不写入历史，避免清空后立刻产生新记录。
+- `src/bootstrap.js`、`src/app.js`
+  - 接入 `OperationHistoryService` 和 `OperationHistoryController`。
+
+前端新增/扩展：
+
+- `public/js/views/history-view.js`
+  - 新增紧凑后台风格操作历史页。
+  - 包含统计卡片、模块筛选、结果筛选、条数选择、刷新、清空和最近操作表格。
+- `public/js/actions/history-actions.js`
+  - 新增加载、筛选、清空操作历史动作。
+- `public/js/api.js`
+  - 新增 `fetchOperationHistory()`、`clearOperationHistory()`。
+- `public/js/state.js`
+  - 新增操作历史状态和重置逻辑。
+- `public/js/actions.js`、`public/js/events.js`、`public/js/views/feature-view.js`
+  - 将侧栏“操作历史”从占位页切到真实页面，并接入事件。
+- `public/css/features/history.css`、`public/styles.css`
+  - 新增操作历史样式，字号保持 11px-16px 的紧凑后台比例。
+
+测试新增：
+
+- `test/operation-history.test.js`
+  - 覆盖成功写操作进入历史。
+  - 覆盖失败写操作进入历史。
+  - 覆盖模块/状态筛选。
+  - 覆盖清空历史不会留下“清空历史”记录。
+  - 覆盖历史响应不包含请求体敏感内容。
+  - 覆盖操作历史页渲染，不退回占位壳子。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+git diff --check
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 29 项全部通过。
+- `git diff --check` 通过。
+
+运行说明：
+
+- 操作历史当前是进程内存数据，重启 `node src/server.js` 后会清空。
+- 后续如果需要长期审计，可将 `OperationHistoryService` 的存储替换为文件或 SQLite，前端 API 不需要改。
+
+## 2026-06-05 部署文档与完整功能调试
+
+用户要求新增部署文档，并在部署完成后进行一次完整功能调试。本次新增独立部署手册，并基于当前工作区代码重启本地 3003 服务做只读浏览器验收。
+
+文档新增/调整：
+
+- 新增 `DEPLOYMENT.md`
+  - 记录 Node.js 运行要求、代码获取、`.env` 配置、本地启动、生产启动。
+  - 补充 systemd 服务示例、Nginx 反向代理示例、部署后健康检查。
+  - 补充升级、回滚、安全边界和常见故障排查。
+  - 明确当前项目无第三方依赖；没有 `npm` 时可以直接用 `node src/server.js`。
+  - 明确 Cloudflare Global API Key 只应保存在服务端 `.env`，不得提交。
+- 更新 `README.md`
+  - 在运行说明末尾增加 `DEPLOYMENT.md` 链接，避免 README 承载过长部署细节。
+
+本地部署：
+
+```bash
+PORT=3003 node src/server.js
+```
+
+当前服务：
+
+- 访问地址：`http://127.0.0.1:3003/`
+- 健康检查：`curl -I http://127.0.0.1:3003/` 返回 `HTTP/1.1 200 OK`
+- 会话检查：`curl http://127.0.0.1:3003/api/session/status` 返回 `hasCredentials: true` 和脱敏邮箱，未返回 Global API Key。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+git diff --check
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 29 项全部通过。
+- `git diff --check` 通过。
+- 敏感信息扫描命中项仅为证书上传输入框占位符和测试假私钥片段，不是真实凭据。
+
+浏览器完整只读调试结果：
+
+- 登录页：
+  - 能识别服务端 `.env` 凭据。
+  - 只显示脱敏邮箱。
+  - “快速进入”可进入后台。
+- 全局功能：
+  - 域名管理：真实 Zone 列表可加载。
+  - 一键加速：页面可打开，默认流程壳子可见。
+  - SaaS优选、免费域名：仿站壳子可打开。
+  - 自动优化：真实设置页面可打开。
+  - 操作历史：真实历史页可打开，筛选、刷新、清空入口可见。
+  - Workers：列表页可打开。
+  - Pages、D1、R2、Workers KV、Worker 模板库、Cloudflare Tunnels：资源页可打开。
+  - 需求开发入口指向 `https://github.com/baize-projects/network/issues/new`。
+- 单域名管理：
+  - 使用 `100222.xyz` 做只读巡检。
+  - DNS 记录、SSL/TLS、缓存管理、防火墙、统计分析、页面规则、证书管理均可打开。
+  - 单域名页面标题、按钮和主要区域正常渲染。
+- 浏览器调试结论：
+  - 控制台无 JavaScript error。
+  - 全局功能页和单域名管理页均无横向溢出。
+  - 本轮没有提交新增、编辑、删除、清缓存、证书创建、Worker 部署等真实 Cloudflare 写操作。
+
+注意事项：
+
+- 当前环境没有 `npm` 命令，但项目无依赖，使用 `node src/server.js` 和 `node --test test/**/*.test.js` 均可正常运行。
+- 操作历史是内存数据，本次重启 3003 服务后历史会从空状态重新记录。
+- `DEPLOYMENT.md` 中的 systemd 单元文件是示例，实际部署时需按服务器项目路径和 Node 路径调整。
+
+## 2026-06-05 前端凭据登录 Cookie 会话与 Key 安全加固
+
+用户要求支持“以前端页面输入 key 和邮箱的方式登录，在浏览器上登录过，保存登录 cookies 30 天”，并增加 Cookie 报错与 Key 安全检查。本次实现为服务端内存会话 + 浏览器 HttpOnly Cookie，不把 Global API Key 写入浏览器可读位置。
+
+后端新增/调整：
+
+- 新增 `src/services/credential-session-service.js`
+  - 登录成功后生成随机 `cf_panel_session` 会话 ID。
+  - Cookie 默认 `Max-Age=2592000`，即 30 天。
+  - Cookie 属性包含 `HttpOnly`、`SameSite=Lax`、`Path=/`。
+  - `NODE_ENV=production`、`SECURE_COOKIES=true` 或 `X-Forwarded-Proto: https` 时自动加 `Secure`。
+  - Cookie 内只保存随机会话 ID，不保存邮箱和 Global API Key。
+  - 邮箱和 Global API Key 只保存在当前 Node.js 进程内存会话中。
+- `src/services/cloudflare/cloudflare-client.js`
+  - 新增请求级凭据上下文，基于 `AsyncLocalStorage` 在单次 API 请求内使用 Cookie 会话凭据。
+  - 保留 `.env` 服务端凭据作为 fallback，避免破坏原有快速进入。
+  - 前端输入凭据不再写入全局 Cloudflare 客户端，避免多用户互相覆盖。
+- `src/controllers/credentials-controller.js`
+  - `GET /api/session/status` 返回：
+    - `source: "cookie"`：浏览器 Cookie 会话。
+    - `source: "server"`：服务端 `.env` 凭据。
+    - `expiresAt`：Cookie 会话过期时间。
+  - `POST /api/session/connect`：
+    - 表单提交完整邮箱和 Global API Key 时创建 30 天 Cookie 会话。
+    - 空表单继续支持服务端 `.env` 快速进入，不下发 Cookie。
+    - 响应体只返回脱敏邮箱、会话来源和过期时间，不返回 Key。
+  - 新增 `POST /api/session/logout`，清理服务端会话并下发过期 Cookie。
+- `src/routes/api-routes.js`
+  - 所有 API 请求会先从 `cf_panel_session` Cookie 解析当前会话凭据，再进入业务控制器。
+  - 操作历史仍不保存请求体，避免 Key、证书私钥、Worker Secret 等敏感信息进入历史。
+- `src/config/env.js`、`.env.example`
+  - 新增 `SESSION_TTL_DAYS=30`。
+  - 新增 `SECURE_COOKIES=false` 示例。
+
+前端新增/调整：
+
+- `public/js/api.js`
+  - 新增 `logoutCloudflareAccount()`。
+- `public/js/actions/session-actions.js`
+  - 页面加载时如果 `/api/session/status` 返回 `source: "cookie"`，自动进入后台并加载 Zone。
+  - 用户以前端输入邮箱和 Key 登录后，会再次调用 `/api/session/status` 验证浏览器已保存 Cookie。
+  - 如果 Cookie 被浏览器拦截，显示：`浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新登录。`
+  - 输入凭据登录后如加载 Zone 失败，会调用退出接口清理刚创建的会话 Cookie，避免坏凭据长期残留。
+  - 点击“退出”现在会请求 `POST /api/session/logout`，清理服务端会话和浏览器 Cookie。
+- `public/js/views/connect-view.js`、`public/css/connect.css`
+  - 登录页新增“安全保存方式”提示：
+    - 浏览器只保存 HttpOnly Cookie。
+    - Cookie 内不包含邮箱或 Global API Key。
+    - 真实 Key 只保存在当前 Node.js 服务端会话中，最长 30 天，退出登录立即清除。
+
+测试新增/扩展：
+
+- `test/smoke.test.js`
+  - 新增 `stores browser credential logins in HttpOnly session cookies without exposing keys`。
+  - 覆盖：
+    - 无 `.env` 凭据时初始状态为未登录。
+    - 前端输入凭据登录会下发 `cf_panel_session`。
+    - Cookie 有 `HttpOnly`、`SameSite=Lax`、`Max-Age=2592000`。
+    - Cookie 和响应体都不包含邮箱或 Global API Key。
+    - 带 Cookie 的 `/api/zones` 请求使用前端输入的邮箱和 Key。
+    - 不带 Cookie 时不会误用前端输入凭据。
+    - `POST /api/session/logout` 会下发 `Max-Age=0` 并撤销会话。
+
+文档更新：
+
+- `README.md`
+  - 安全说明补充 30 天 HttpOnly Cookie 会话与 Key 不落浏览器。
+- `DEPLOYMENT.md`
+  - 增加 `SESSION_TTL_DAYS`、`SECURE_COOKIES`。
+  - 增加 Cookie 健康检查、安全边界和 Cookie 保存失败排查。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+git diff --check
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 30 项全部通过。
+- `git diff --check` 通过。
+
+安全边界：
+
+- 本次实现没有把 Global API Key 放入 Cookie、localStorage、sessionStorage、前端响应体或操作历史。
+- Cookie 会话是进程内存会话；Node 重启后需要重新登录，这是为了避免把 Global API Key 持久化到磁盘。
+- 如果生产环境启用 `Secure` Cookie，必须通过 HTTPS 访问，否则浏览器不会保存 Cookie，前端会显示 Cookie 保存失败提示。
+
+## 2026-06-05 GitHub Actions 发布 pages 分支
+
+用户要求先把代码推到 `baize-projects/network.git`，由 workflow 自动构建，构建完成后创建 `pages` 分支并部署到 GitHub Pages。本次新增 GitHub Actions 自动发布静态 Pages 分支。
+
+新增/调整：
+
+- 新增 `.github/workflows/publish-pages-branch.yml`
+  - 触发条件：
+    - 推送 `main`。
+    - 手动 `workflow_dispatch`。
+  - 权限：`contents: write`，用于把构建产物推送到 `pages` 分支。
+  - 构建流程：
+    - `actions/checkout@v4`
+    - `actions/setup-node@v4`，Node 版本 `24`
+    - `find src public/js test -name '*.js' -print -exec node --check {} \;`
+    - `node --test test/**/*.test.js`
+    - 将 `public/` 复制到 `_site/`
+    - 添加 `_site/.nojekyll`
+    - 在 `_site/` 内初始化临时 git 仓库，强制推送到远端 `pages` 分支
+- GitHub Pages 子路径兼容：
+  - `public/index.html`
+    - `/assets/spider-icon.png` 改为 `./assets/spider-icon.png`
+    - `/styles.css` 改为 `./styles.css`
+    - `/app.js` 改为 `./app.js`
+  - `public/js/views/connect-view.js`
+    - 品牌图标改为 `assets/spider-icon.png`
+  - `public/js/views/shell-view.js`
+    - 品牌图标改为 `assets/spider-icon.png`
+
+本地验证：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+git diff --check
+rg -n 'src="/|href="/assets|href="/styles|src="/app|url\(/' public .github/workflows/publish-pages-branch.yml
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 30 项全部通过。
+- `git diff --check` 通过。
+- 静态资源绝对路径扫描无命中，适配项目 Pages 地址 `/network/`。
+
+注意事项：
+
+- GitHub Pages 只能托管静态文件。当前 `public/` 前端会被发布到 Pages，但 Cloudflare 管理 API 仍依赖 Node.js 服务端，Pages 站点本身不能直接执行真实管理功能。
+- 部署后需要在 GitHub Pages 设置里把 source 指向 `pages` 分支根目录。若仓库未开启 Pages，需通过 GitHub API 或仓库设置启用。

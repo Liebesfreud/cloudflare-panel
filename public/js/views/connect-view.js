@@ -7,11 +7,16 @@ function renderSavedAccount() {
     return "";
   }
 
+  const isCookieSession = state.sessionSource === "cookie";
+  const savedLabel = isCookieSession
+    ? "已保存浏览器登录，会话最长保留 30 天"
+    : "已从本地服务端检测到 Cloudflare 凭据";
+
   return `
     <div class="saved-account">
       <div>
         <strong>${escapeHtml(state.sessionEmail || "已配置服务端凭据")}</strong>
-        <span>已从本地服务端检测到 Cloudflare 凭据</span>
+        <span>${escapeHtml(savedLabel)}</span>
       </div>
       <button class="ghost-button" type="button" id="connect-with-server-credentials">
         快速进入
@@ -57,6 +62,12 @@ function renderConnectBody() {
       </label>
       <p class="connect-help">点击右上角头像 -> 配置文件 -> API 令牌 -> 下拉到 API 密钥 -> 查看或创建 Global API Key</p>
 
+      <div class="connect-security">
+        <strong>安全保存方式</strong>
+        <span>登录后浏览器仅保存 HttpOnly 会话 Cookie，Cookie 内不包含邮箱或 Global API Key。</span>
+        <span>真实 Key 只保存在当前 Node.js 服务端会话中，最长 30 天，退出登录会立即清除。</span>
+      </div>
+
       <button class="primary-button connect-submit" type="submit" ${state.connectingSession ? "disabled" : ""}>
         ${state.connectingSession ? "验证中..." : "验证并进入管理后台"}
       </button>
@@ -79,7 +90,7 @@ export function renderConnectView() {
     <main class="connect-page">
       <header class="connect-header">
         <div class="connect-brand">
-          <img class="connect-brand-mark" src="/assets/spider-icon.png" alt="Spider" />
+          <img class="connect-brand-mark" src="assets/spider-icon.png" alt="Spider" />
           <div>
             <h1>蜘蛛网络</h1>
             <p>好用的Cloudflare管理工具</p>

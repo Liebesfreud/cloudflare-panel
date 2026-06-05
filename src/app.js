@@ -8,10 +8,14 @@ export function createApp({
   automationController,
   cacheSettingsController,
   certificatesController,
+  cloudflareClient,
   credentialsController,
+  credentialSessionService,
   developerResourcesController,
   dnsRecordsController,
   firewallRulesController,
+  operationHistoryController,
+  operationHistoryService,
   pageRulesController,
   speedDeployController,
   sslSettingsController,
@@ -23,10 +27,14 @@ export function createApp({
     automationController,
     cacheSettingsController,
     certificatesController,
+    cloudflareClient,
     credentialsController,
+    credentialSessionService,
     developerResourcesController,
     dnsRecordsController,
     firewallRulesController,
+    operationHistoryController,
+    operationHistoryService,
     pageRulesController,
     speedDeployController,
     sslSettingsController,
@@ -41,7 +49,7 @@ export function createApp({
 
       if (handler) {
         const result = await handler({ request, url });
-        sendJson(response, result.statusCode, result.body);
+        sendJson(response, result.statusCode, result.body, result.headers);
         return;
       }
 

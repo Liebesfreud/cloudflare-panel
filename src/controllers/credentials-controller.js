@@ -12,18 +12,24 @@ function maskEmail(email) {
 }
 
 export class CredentialsController {
-  constructor({ cloudflareClient }) {
+  constructor({ cloudflareClient, credentialSessionService }) {
     this.cloudflareClient = cloudflareClient;
+    this.credentialSessionService = credentialSessionService;
   }
 
-  status = async () => {
-    const hasCredentials = this.cloudflareClient.hasCredentials();
+  status = async ({ request }) => {
+    const sessionCredentials = this.credentialSessionService.getCredentials(request);
+    const baseCredentials = this.cloudflareClient.getBaseCredentials();
+    const credentials = sessionCredentials || baseCredentials;
+    const hasCredentials = Boolean(credentials.email && credentials.globalApiKey);
 
     return {
       statusCode: 200,
       body: {
         hasCredentials,
-        email: hasCredentials ? maskEmail(this.cloudflareClient.email) : "",
+        email: hasCredentials ? maskEmail(credentials.email) : "",
+        expiresAt: sessionCredentials?.expiresAt || "",
+        source: sessionCredentials ? "cookie" : hasCredentials ? "server" : "",
       },
     };
   };
@@ -44,12 +50,16 @@ export class CredentialsController {
       };
     }
 
-    const email = hasCompleteSuppliedCredentials
-      ? suppliedEmail
-      : this.cloudflareClient.email;
-    const globalApiKey = hasCompleteSuppliedCredentials
-      ? suppliedGlobalApiKey
-      : this.cloudflareClient.globalApiKey;
+    const existingSession = this.credentialSessionService.getCredentials(request);
+    const baseCredentials = this.cloudflareClient.getBaseCredentials();
+    const email =
+      suppliedEmail ||
+      existingSession?.email ||
+      baseCredentials.email;
+    const globalApiKey =
+      suppliedGlobalApiKey ||
+      existingSession?.globalApiKey ||
+      baseCredentials.globalApiKey;
 
     if (!email || !globalApiKey) {
       return {
@@ -60,15 +70,60 @@ export class CredentialsController {
       };
     }
 
-    if (hasCompleteSuppliedCredentials) {
-      this.cloudflareClient.setCredentials({ email, globalApiKey });
+    if (existingSession && !hasCompleteSuppliedCredentials) {
+      return {
+        statusCode: 200,
+        body: {
+          hasCredentials: true,
+          email: maskEmail(existingSession.email),
+          expiresAt: existingSession.expiresAt,
+          source: "cookie",
+        },
+      };
     }
+
+    if (!hasCompleteSuppliedCredentials) {
+      return {
+        statusCode: 200,
+        body: {
+          hasCredentials: true,
+          email: maskEmail(email),
+          expiresAt: "",
+          source: "server",
+        },
+      };
+    }
+
+    const session = this.credentialSessionService.create({
+      email,
+      globalApiKey,
+      source: "browser",
+    });
 
     return {
       statusCode: 200,
+      headers: {
+        "Set-Cookie": this.credentialSessionService.createCookie(request, session),
+      },
       body: {
         hasCredentials: true,
         email: maskEmail(email),
+        expiresAt: session.expiresAt,
+        source: "cookie",
+      },
+    };
+  };
+
+  logout = async ({ request }) => {
+    this.credentialSessionService.revoke(request);
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Set-Cookie": this.credentialSessionService.clearCookie(request),
+      },
+      body: {
+        ok: true,
       },
     };
   };

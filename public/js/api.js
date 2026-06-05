@@ -30,6 +30,14 @@ export async function connectCloudflareAccount(credentials) {
   return readJson(response, "验证 Cloudflare 凭据失败");
 }
 
+export async function logoutCloudflareAccount() {
+  const response = await fetch("/api/session/logout", {
+    method: "POST",
+  });
+
+  return readJson(response, "退出登录失败");
+}
+
 export async function fetchDnsRecords(zoneId) {
   const response = await fetch(`/api/zones/${zoneId}/dns-records`);
   const payload = await readJson(response, "读取 DNS 记录失败");
@@ -713,4 +721,33 @@ export async function saveAutomationTieredCaching(zoneId, enabled) {
   const payload = await readJson(response, "保存分层缓存失败");
 
   return payload.automation;
+}
+
+export async function fetchOperationHistory(options = {}) {
+  const params = new URLSearchParams();
+
+  if (options.module) {
+    params.set("module", options.module);
+  }
+
+  if (options.status) {
+    params.set("status", options.status);
+  }
+
+  if (options.limit) {
+    params.set("limit", String(options.limit));
+  }
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/operation-history${suffix}`);
+  const payload = await readJson(response, "读取操作历史失败");
+
+  return payload.history;
+}
+
+export async function clearOperationHistory() {
+  const response = await fetch("/api/operation-history", { method: "DELETE" });
+  const payload = await readJson(response, "清空操作历史失败");
+
+  return payload.history;
 }

@@ -3,6 +3,7 @@ import { createAutomationActions } from "./actions/automation-actions.js";
 import { createDeveloperResourcesActions } from "./actions/developer-resources-actions.js";
 import { createDnsActions } from "./actions/dns-actions.js";
 import { createDomainActions } from "./actions/domain-actions.js";
+import { createHistoryActions } from "./actions/history-actions.js";
 import { createNoticeActions } from "./actions/notice-actions.js";
 import { createSessionActions } from "./actions/session-actions.js";
 import { createSpeedActions } from "./actions/speed-actions.js";
@@ -17,6 +18,7 @@ export function createActions({ renderApp }) {
   const automationActions = createAutomationActions({ renderApp });
   const developerResourcesActions = createDeveloperResourcesActions({ renderApp });
   const dnsActions = createDnsActions({ renderApp });
+  const historyActions = createHistoryActions({ renderApp });
   const speedActions = createSpeedActions({ renderApp });
   const workersActions = createWorkersActions({ renderApp });
   const zoneSettingsActions = createZoneSettingsActions({ renderApp });
@@ -81,6 +83,7 @@ export function createActions({ renderApp }) {
 
     await automationActions.ensureAutomationLoaded();
     await developerResourcesActions.ensureDeveloperResourcesLoaded();
+    await historyActions.ensureOperationHistoryLoaded();
     await workersActions.ensureWorkersLoaded();
   }
 
@@ -92,6 +95,7 @@ export function createActions({ renderApp }) {
     domainActions.openMainSection(section);
     await automationActions.ensureAutomationLoaded();
     await developerResourcesActions.ensureDeveloperResourcesLoaded();
+    await historyActions.ensureOperationHistoryLoaded();
     await workersActions.ensureWorkersLoaded();
   }
 
@@ -101,6 +105,7 @@ export function createActions({ renderApp }) {
     ...developerResourcesActions,
     ...domainActions,
     ...dnsActions,
+    ...historyActions,
     ...sessionActions,
     ...speedActions,
     ...workersActions,

@@ -59,7 +59,7 @@ export function renderShell(content) {
   app.innerHTML = `
     <aside class="sidebar">
       <div class="brand">
-        <img class="brand-mark" src="/assets/spider-icon.png" alt="Spider" />
+        <img class="brand-mark" src="assets/spider-icon.png" alt="Spider" />
         <div>
           <strong>蜘蛛网络</strong>
           <span>

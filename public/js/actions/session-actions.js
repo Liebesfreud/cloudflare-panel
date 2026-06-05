@@ -1,4 +1,8 @@
-import { connectCloudflareAccount, fetchSessionStatus } from "../api.js";
+import {
+  connectCloudflareAccount,
+  fetchSessionStatus,
+  logoutCloudflareAccount,
+} from "../api.js";
 import { resetSessionState, state } from "../state.js";
 
 function readConnectForm() {
@@ -26,6 +30,13 @@ export function createSessionActions({ loadZones, renderApp }) {
       const session = await fetchSessionStatus();
       state.sessionHasServerCredentials = Boolean(session.hasCredentials);
       state.sessionEmail = session.email || "";
+      state.sessionExpiresAt = session.expiresAt || "";
+      state.sessionSource = session.source || "";
+
+      if (session.source === "cookie") {
+        state.connected = true;
+        await loadZones({ throwOnError: false });
+      }
     } catch (error) {
       state.sessionError = error.message;
     } finally {
@@ -38,6 +49,7 @@ export function createSessionActions({ loadZones, renderApp }) {
     event?.preventDefault();
 
     const credentials = readConnectForm();
+    const hasSuppliedCredentials = Boolean(credentials.email && credentials.globalApiKey);
 
     if (
       !state.sessionHasServerCredentials &&
@@ -53,13 +65,30 @@ export function createSessionActions({ loadZones, renderApp }) {
     renderApp();
 
     try {
-      const session = await connectCloudflareAccount(credentials);
+      let session = await connectCloudflareAccount(credentials);
+
+      if (hasSuppliedCredentials) {
+        const verifiedSession = await fetchSessionStatus();
+
+        if (verifiedSession.source !== "cookie") {
+          throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新登录。");
+        }
+
+        session = verifiedSession;
+      }
+
       state.connected = true;
       state.sessionHasServerCredentials = Boolean(session.hasCredentials);
       state.sessionEmail = session.email || credentials.email;
+      state.sessionExpiresAt = session.expiresAt || "";
+      state.sessionSource = session.source || "";
       state.mainSection = "domain";
       await loadZones({ throwOnError: true });
     } catch (error) {
+      if (hasSuppliedCredentials) {
+        await logoutCloudflareAccount().catch(() => {});
+      }
+
       state.connected = false;
       state.zoneError = "";
       state.sessionError = error.message;
@@ -69,7 +98,13 @@ export function createSessionActions({ loadZones, renderApp }) {
     }
   }
 
-  function logoutSession() {
+  async function logoutSession() {
+    try {
+      await logoutCloudflareAccount();
+    } catch {
+      // Local state should still be cleared if the network request fails.
+    }
+
     resetSessionState();
     history.replaceState(null, "", location.pathname);
     renderApp();

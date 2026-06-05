@@ -49,6 +49,8 @@ http://localhost:3000
 
 也可以使用兼容变量名：`CF_EMAIL`、`CF_GLOBAL_API_KEY`、`CLOUDFLARE_API_KEY`、`CF_API_KEY`。
 
+生产部署、systemd、Nginx、升级回滚和部署后验收流程见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+
 ## 项目结构
 
 ```text
@@ -80,7 +82,9 @@ node --test test/**/*.test.js
 
 ## 安全说明
 
-Cloudflare Global API Key 只在服务端读取，不会写入前端页面或浏览器接口响应。请只提交 `.env.example`，不要把真实 `.env`、API Key、截图或本地交接文档提交到仓库。
+Cloudflare Global API Key 只在服务端读取，不会写入前端页面或浏览器接口响应。用户通过前端输入邮箱和 Global API Key 登录时，浏览器只保存 30 天 HttpOnly 会话 Cookie，Cookie 内不包含邮箱或 Key；真实 Key 只保存在当前 Node.js 进程内存会话中，退出或服务重启后会失效。
+
+请只提交 `.env.example`，不要把真实 `.env`、API Key、截图或本地交接文档提交到仓库。
 
 ## License
 

@@ -4,6 +4,7 @@ import { state } from "../state.js";
 import { escapeHtml } from "../utils.js";
 import { renderAutomationView } from "./automation-view.js";
 import { renderDeveloperResourcesView } from "./developer-resources-view.js";
+import { renderHistoryView } from "./history-view.js";
 import { renderShell } from "./shell-view.js";
 import { renderSpeedView } from "./speed-view.js";
 import { renderWorkersView } from "./workers-view.js";
@@ -32,6 +33,11 @@ export function renderFeatureView() {
 
   if (state.mainSection === "workers") {
     renderWorkersView();
+    return;
+  }
+
+  if (state.mainSection === "history") {
+    renderHistoryView();
     return;
   }
 

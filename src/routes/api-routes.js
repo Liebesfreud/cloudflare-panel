@@ -507,10 +507,14 @@ export function createApiRouter({
   automationController,
   cacheSettingsController,
   certificatesController,
+  cloudflareClient,
   credentialsController,
+  credentialSessionService,
   developerResourcesController,
   dnsRecordsController,
   firewallRulesController,
+  operationHistoryController,
+  operationHistoryService,
   pageRulesController,
   speedDeployController,
   sslSettingsController,
@@ -520,6 +524,9 @@ export function createApiRouter({
   const routes = new Map([
     ["GET /api/session/status", credentialsController.status],
     ["POST /api/session/connect", credentialsController.connect],
+    ["POST /api/session/logout", credentialsController.logout],
+    ["GET /api/operation-history", operationHistoryController.list],
+    ["DELETE /api/operation-history", operationHistoryController.clear],
     ["GET /api/developer-resources/:type", developerResourcesController.list],
     ["POST /api/developer-resources/:type", developerResourcesController.create],
     ["GET /api/developer-resources/:type/:resourceId/detail", developerResourcesController.detail],
@@ -657,7 +664,42 @@ export function createApiRouter({
         return null;
       }
 
-      return (context) => handler({ ...context, params: match.params });
+      return async (context) => {
+        const startedAt = Date.now();
+        const credentials = credentialSessionService?.getCredentials(context.request);
+        const executeHandler = () => handler({ ...context, credentials, params: match.params });
+
+        try {
+          const result = await cloudflareClient.withCredentials(credentials, executeHandler);
+
+          if (operationHistoryService?.shouldRecord(context.request.method, context.url.pathname)) {
+            operationHistoryService.record({
+              durationMs: Date.now() - startedAt,
+              method: context.request.method,
+              params: match.params,
+              pathname: context.url.pathname,
+              status: result.statusCode >= 400 ? "failed" : "success",
+              statusCode: result.statusCode,
+            });
+          }
+
+          return result;
+        } catch (error) {
+          if (operationHistoryService?.shouldRecord(context.request.method, context.url.pathname)) {
+            operationHistoryService.record({
+              durationMs: Date.now() - startedAt,
+              error: error.message,
+              method: context.request.method,
+              params: match.params,
+              pathname: context.url.pathname,
+              status: "failed",
+              statusCode: error.statusCode || 500,
+            });
+          }
+
+          throw error;
+        }
+      };
     },
     isApiPath(url) {
       return url.pathname.startsWith("/api/");
