@@ -2751,3 +2751,41 @@ rg -n '@import url\("/|href="/assets|href="/styles|src="/app|src="/' public .git
 - JS 语法检查通过。
 - Node test 全量 30 项全部通过。
 - CSS 和入口静态资源扫描确认没有影响 GitHub Pages 子路径的绝对引用。
+
+线上验证：
+
+- `Build and Publish Pages Branch` run `27017506075` 成功。
+- `pages-build-deployment` run `27017518005` 成功。
+- `https://baize-projects.github.io/network/styles.css` 已返回相对 `@import url("./css/...")`。
+- `https://baize-projects.github.io/network/css/base.css` 返回 `200`。
+- in-app browser 复查首屏时样式已恢复，字体为系统 UI 字体，背景为 `rgb(248, 250, 252)`，品牌标题显示为“蜘蛛网络”。
+
+## 2026-06-05 GitHub Pages 静态环境 API 错误降级
+
+线上复查样式时发现 GitHub Pages 静态站点没有 Node.js API 后端，`/api/session/status` 会返回 HTML，旧前端会把 HTML 当 JSON 解析并在登录页显示 `Unexpected token '<'`。这不是样式问题，但会让 Pages 首屏看起来像运行错误，因此一并修复。
+
+修复内容：
+
+- `public/js/api.js`
+  - 新增 `ApiUnavailableError`。
+  - `readJson()` 先检查 `Content-Type` 是否为 JSON；非 JSON 响应统一转换为“当前页面未连接 Node.js 后端，请在 Node 服务部署地址打开后再登录。”。
+  - 避免把浏览器原生 JSON 解析错误暴露给用户。
+- `public/js/actions/session-actions.js`
+  - 启动时 `checkSession()` 遇到 `ApiUnavailableError` 静默处理，保持 GitHub Pages 登录首屏干净。
+  - 用户主动点击登录时仍显示需要 Node 后端的中文提示。
+- `test/frontend-api.test.js`
+  - 覆盖非 JSON 静态 Pages 响应。
+  - 覆盖启动 session 检查不显示错误。
+  - 覆盖手动登录时显示 Node 后端缺失提示。
+
+验证命令：
+
+```bash
+node --test test/frontend-api.test.js
+find src public/js test -name '*.js' -print -exec node --check {} \;
+```
+
+验证结果：
+
+- 新增前端 API 边界测试 3 项通过。
+- JS 语法检查通过。

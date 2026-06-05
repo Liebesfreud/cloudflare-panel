@@ -1,4 +1,5 @@
 import {
+  ApiUnavailableError,
   connectCloudflareAccount,
   fetchSessionStatus,
   logoutCloudflareAccount,
@@ -38,7 +39,9 @@ export function createSessionActions({ loadZones, renderApp }) {
         await loadZones({ throwOnError: false });
       }
     } catch (error) {
-      state.sessionError = error.message;
+      if (!(error instanceof ApiUnavailableError)) {
+        state.sessionError = error.message;
+      }
     } finally {
       state.checkingSession = false;
       renderApp();

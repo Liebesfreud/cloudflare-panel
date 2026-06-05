@@ -1,4 +1,26 @@
+export class ApiUnavailableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ApiUnavailableError";
+    this.code = "API_UNAVAILABLE";
+  }
+}
+
+const API_UNAVAILABLE_MESSAGE =
+  "当前页面未连接 Node.js 后端，请在 Node 服务部署地址打开后再登录。";
+
+function isJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+
+  return /\bapplication\/(?:[\w.+-]+\+)?json\b/i.test(contentType);
+}
+
 async function readJson(response, fallbackMessage) {
+  if (!isJsonResponse(response)) {
+    await response.text().catch(() => "");
+    throw new ApiUnavailableError(API_UNAVAILABLE_MESSAGE);
+  }
+
   const payload = await response.json();
 
   if (!response.ok) {
