@@ -108,6 +108,20 @@ function normalizeCustomHostname(hostname) {
   };
 }
 
+function normalizeZoneName(zone = {}) {
+  const name = String(zone.name || "").trim().toLowerCase();
+
+  if (!name) {
+    throw new HttpError(502, "Cloudflare 区域返回格式异常，请稍后重试。");
+  }
+
+  return name;
+}
+
+function speedDomainIdentity(value) {
+  return normalizeHostname(value, "加速域名");
+}
+
 function customHostnameBody(config) {
   return {
     hostname: config.accessDomain,
@@ -163,6 +177,95 @@ export class SpeedDeployService {
       zoneId: config.zoneId,
       zoneName: config.zoneName,
     };
+  }
+
+  async listManagedDomains(zoneId) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const [zonePayload, records, customHostnames] = await Promise.all([
+      this.cloudflareClient.get(`zones/${zoneId}`),
+      this.dnsRecordsService.listRecords(zoneId),
+      this.listCustomHostnames(zoneId).catch(() => []),
+    ]);
+    const zoneName = normalizeZoneName(zonePayload.result || {});
+    const managedAccessRecords = records.filter(
+      (record) => record.type === "CNAME" && record.comment === accessDomainComment
+    );
+    const managedByName = new Map();
+
+    for (const record of managedAccessRecords) {
+      managedByName.set(record.name, {
+        id: record.name,
+        accessDomain: record.name,
+        accessRecord: record,
+        fallbackOrigin: `${fallbackOriginLabel}.${zoneName}`,
+        optimizedDomain: record.content,
+        targetDomain: "",
+        cacheTtl: "0",
+        status: "dns-ready",
+        customHostname: null,
+        createdAt: record.createdOn || record.modifiedOn || "",
+      });
+    }
+
+    for (const hostname of customHostnames) {
+      const normalized = normalizeCustomHostname(hostname);
+      const existing = managedByName.get(normalized.hostname) || {
+        id: normalized.hostname,
+        accessDomain: normalized.hostname,
+        accessRecord: null,
+        fallbackOrigin: `${fallbackOriginLabel}.${zoneName}`,
+        optimizedDomain: "",
+        cacheTtl: "0",
+        createdAt: "",
+      };
+
+      managedByName.set(normalized.hostname, {
+        ...existing,
+        customHostname: normalized,
+        targetDomain: normalized.customOriginServer,
+        status: normalized.status || existing.status || "unknown",
+      });
+    }
+
+    return {
+      zoneId,
+      zoneName,
+      domains: [...managedByName.values()].sort((left, right) =>
+        left.accessDomain.localeCompare(right.accessDomain)
+      ),
+    };
+  }
+
+  async deleteManagedDomain(zoneId, accessDomain) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const hostname = speedDomainIdentity(accessDomain);
+    const [records, customHostname] = await Promise.all([
+      this.dnsRecordsService.listRecords(zoneId),
+      this.findCustomHostname(zoneId, hostname).catch(() => null),
+    ]);
+    const deleted = [];
+
+    for (const record of records) {
+      if (record.name !== hostname || record.comment !== accessDomainComment) {
+        continue;
+      }
+
+      await this.dnsRecordsService.deleteRecord(zoneId, record.id);
+      deleted.push({ type: "dns", id: record.id, name: record.name });
+    }
+
+    if (customHostname?.id) {
+      await this.cloudflareClient.deleteAny(
+        `zones/${zoneId}/custom_hostnames/${customHostname.id}`
+      );
+      deleted.push({ type: "custom_hostname", id: customHostname.id, name: hostname });
+    }
+
+    if (deleted.length === 0) {
+      throw new HttpError(404, "未找到由面板管理的加速域名");
+    }
+
+    return { zoneId, accessDomain: hostname, deleted };
   }
 
   assertSourceDnsRecord(config, records) {
@@ -341,6 +444,36 @@ export class SpeedDeployService {
     }
 
     return payload.result.find((item) => item.hostname === hostname) || null;
+  }
+
+  async listCustomHostnames(zoneId) {
+    const hostnames = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const payload = await this.cloudflareClient.get(`zones/${zoneId}/custom_hostnames`, {
+        page,
+        per_page: 50,
+      });
+
+      if (!Array.isArray(payload.result)) {
+        throw new HttpError(502, "Cloudflare API 返回自定义主机名格式异常");
+      }
+
+      hostnames.push(...payload.result);
+
+      const pageCount = Number(payload.result_info?.total_pages);
+      const totalCount = Number(payload.result_info?.total_count);
+      totalPages = Number.isFinite(pageCount)
+        ? Math.max(1, pageCount)
+        : Number.isFinite(totalCount)
+          ? Math.max(1, Math.ceil(totalCount / 50))
+          : page;
+      page += 1;
+    } while (page <= totalPages);
+
+    return hostnames;
   }
 }
 

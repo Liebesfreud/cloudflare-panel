@@ -6,6 +6,7 @@ const rangeLabels = {
   "24h": "最近 24 小时",
   "7d": "最近 7 天",
   "30d": "最近 30 天",
+  custom: "自定义范围",
 };
 
 function formatNumber(value) {
@@ -77,6 +78,16 @@ function renderRangeButton(value, label) {
     >
       ${escapeHtml(label)}
     </button>
+  `;
+}
+
+function renderCustomRangeForm() {
+  return `
+    <form class="analytics-date-form" id="analytics-range-form">
+      <input name="startDate" type="date" value="${escapeHtml(state.analyticsStartDate)}" />
+      <input name="endDate" type="date" value="${escapeHtml(state.analyticsEndDate)}" />
+      <button class="secondary-button analytics-range-button" type="submit" ${state.loadingAnalytics ? "disabled" : ""}>查询</button>
+    </form>
   `;
 }
 
@@ -298,6 +309,42 @@ function renderDistributionStats(analytics) {
   `;
 }
 
+function renderSecurityEvents(analytics) {
+  const warnings = Array.isArray(analytics.warnings) ? analytics.warnings : [];
+  const events = Array.isArray(analytics.securityEvents) ? analytics.securityEvents : [];
+
+  return `
+    <section class="analytics-card">
+      <h3>安全事件采样</h3>
+      ${
+        warnings.length
+          ? `<div class="analytics-warning-list">${warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>`
+          : ""
+      }
+      ${
+        events.length
+          ? `<div class="analytics-security-list">
+              ${events
+                .slice(0, 8)
+                .map(
+                  (event) => `
+                    <div class="analytics-security-row">
+                      <div>
+                        <strong>${escapeHtml(event.description || event.source || "Security Event")}</strong>
+                        <span>${escapeHtml(event.ip || "-")} · ${escapeHtml(event.country || "-")} · ${escapeHtml(event.userAgent || "-")}</span>
+                      </div>
+                      <em>${escapeHtml(event.action || "unknown")} · ${formatNumber(event.count)}</em>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : `<div class="analytics-mini-empty">暂无安全事件采样数据</div>`
+      }
+    </section>
+  `;
+}
+
 function renderAnalyticsContent() {
   const analytics = state.analytics;
 
@@ -342,6 +389,7 @@ function renderAnalyticsContent() {
       ${renderPerformanceStats()}
     </div>
     ${renderDistributionStats(analytics)}
+    ${renderSecurityEvents(analytics)}
   `;
 }
 
@@ -370,6 +418,7 @@ export function renderAnalyticsSettingsView() {
             ${renderRangeButton("24h", "24小时")}
             ${renderRangeButton("7d", "7天")}
             ${renderRangeButton("30d", "30天")}
+            ${renderCustomRangeForm()}
           </div>
         </div>
         <div class="analytics-original-body">

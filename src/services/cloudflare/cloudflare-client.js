@@ -126,6 +126,43 @@ export class CloudflareClient {
     return payload;
   }
 
+  async getRaw(path, searchParams = {}, headers = {}) {
+    return this.sendRaw("GET", path, { searchParams, headers });
+  }
+
+  async postRaw(path, body, headers = {}) {
+    return this.sendRaw("POST", path, { body, headers });
+  }
+
+  async putRaw(path, body, headers = {}) {
+    return this.sendRaw("PUT", path, { body, headers });
+  }
+
+  async sendRaw(method, path, { searchParams = {}, body, headers = {} } = {}) {
+    if (!this.hasCredentials()) {
+      throw new HttpError(
+        412,
+        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
+      );
+    }
+
+    const response = await this.request(this.makeUrl(path, searchParams), {
+      method,
+      body,
+      headers,
+      serializeJson: false,
+    });
+
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        await this.readErrorMessage(response, `Cloudflare API 请求失败 (${response.status})`)
+      );
+    }
+
+    return response;
+  }
+
   async graphql(query, variables = {}) {
     if (!this.hasCredentials()) {
       throw new HttpError(
@@ -166,6 +203,10 @@ export class CloudflareClient {
 
     const response = await this.request(url, { method, body });
     const payload = await response.json().catch(() => null);
+
+    if (response.ok && response.status === 204 && !payload) {
+      return { success: true, result: null };
+    }
 
     if (!response.ok || !payload?.success) {
       const cloudflareMessage =

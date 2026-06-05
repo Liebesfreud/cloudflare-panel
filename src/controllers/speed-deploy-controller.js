@@ -11,4 +11,17 @@ export class SpeedDeployController {
 
     return { statusCode: 200, body: { deployment } };
   };
+
+  list = async ({ params }) => {
+    const speed = await this.speedDeployService.listManagedDomains(params.zoneId);
+    return { statusCode: 200, body: { speed } };
+  };
+
+  delete = async ({ params }) => {
+    const result = await this.speedDeployService.deleteManagedDomain(
+      params.zoneId,
+      params.accessDomain
+    );
+    return { statusCode: 200, body: result };
+  };
 }

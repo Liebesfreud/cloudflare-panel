@@ -72,13 +72,49 @@ export async function fetchCacheSettings(zoneId) {
   return readJson(response, "读取缓存设置失败");
 }
 
+export async function fetchSslSettings(zoneId) {
+  const response = await fetch(`/api/zones/${zoneId}/ssl-settings`);
+  const payload = await readJson(response, "读取 SSL/TLS 设置失败");
+
+  return payload.ssl;
+}
+
+export async function saveSslSettings(zoneId, settings) {
+  const response = await fetch(`/api/zones/${zoneId}/ssl-settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  const payload = await readJson(response, "保存 SSL/TLS 设置失败");
+
+  return payload.ssl;
+}
+
 export async function fetchCertificates(zoneId) {
   const response = await fetch(`/api/zones/${zoneId}/certificates`);
   return readJson(response, "读取证书状态失败");
 }
 
-export async function fetchZoneAnalytics(zoneId, days = 7) {
-  const response = await fetch(`/api/zones/${zoneId}/analytics?days=${encodeURIComponent(days)}`);
+export async function fetchZoneAnalytics(zoneId, options = 7) {
+  const params = new URLSearchParams();
+
+  if (typeof options === "number") {
+    params.set("days", String(options));
+  } else {
+    if (options.days) {
+      params.set("days", String(options.days));
+    }
+
+    if (options.startDate) {
+      params.set("startDate", options.startDate);
+    }
+
+    if (options.endDate) {
+      params.set("endDate", options.endDate);
+    }
+  }
+
+  const response = await fetch(`/api/zones/${zoneId}/analytics?${params.toString()}`);
   const payload = await readJson(response, "读取统计分析失败");
 
   return payload.analytics;
@@ -106,9 +142,41 @@ export async function purgeCache(zoneId, request) {
 
 export async function fetchFirewallRules(zoneId) {
   const response = await fetch(`/api/zones/${zoneId}/firewall-rules`);
-  const payload = await readJson(response, "读取防火墙规则失败");
+  return readJson(response, "读取防火墙规则失败");
+}
 
-  return payload.rules;
+export async function createRulesetRule(zoneId, rule) {
+  const response = await fetch(`/api/zones/${zoneId}/firewall-rulesets/rules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(rule),
+  });
+  const payload = await readJson(response, "创建新版防火墙规则失败");
+
+  return payload.rule;
+}
+
+export async function updateRulesetRule(zoneId, rulesetId, ruleId, rule) {
+  const response = await fetch(
+    `/api/zones/${zoneId}/firewall-rulesets/${encodeURIComponent(rulesetId)}/rules/${encodeURIComponent(ruleId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rule),
+    }
+  );
+  const payload = await readJson(response, "更新新版防火墙规则失败");
+
+  return payload.rule;
+}
+
+export async function removeRulesetRule(zoneId, rulesetId, ruleId) {
+  const response = await fetch(
+    `/api/zones/${zoneId}/firewall-rulesets/${encodeURIComponent(rulesetId)}/rules/${encodeURIComponent(ruleId)}`,
+    { method: "DELETE" }
+  );
+
+  return readJson(response, "删除新版防火墙规则失败");
 }
 
 export async function fetchPageRules(zoneId) {
@@ -186,6 +254,43 @@ export async function removeCustomCertificate(zoneId, certificateId) {
   return readJson(response, "删除证书失败");
 }
 
+export async function uploadCustomCertificate(zoneId, request) {
+  const response = await fetch(`/api/zones/${zoneId}/certificates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const payload = await readJson(response, "上传自定义证书失败");
+
+  return payload.certificate;
+}
+
+export async function createOriginCertificate(zoneId, request) {
+  const response = await fetch(`/api/zones/${zoneId}/origin-certificates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const payload = await readJson(response, "创建 Origin CA 证书失败");
+
+  return payload.certificate;
+}
+
+export async function removeOriginCertificate(zoneId, certificateId) {
+  const response = await fetch(`/api/zones/${zoneId}/origin-certificates/${encodeURIComponent(certificateId)}`, {
+    method: "DELETE",
+  });
+
+  return readJson(response, "删除 Origin CA 证书失败");
+}
+
+export async function fetchSpeedAcceleratedDomains(zoneId) {
+  const response = await fetch(`/api/zones/${zoneId}/speed-deploy`);
+  const payload = await readJson(response, "读取已加速域名失败");
+
+  return payload.speed;
+}
+
 export async function deploySpeedAcceleration(zoneId, request) {
   const response = await fetch(`/api/zones/${zoneId}/speed-deploy`, {
     method: "POST",
@@ -195,6 +300,15 @@ export async function deploySpeedAcceleration(zoneId, request) {
   const payload = await readJson(response, "部署一键加速失败");
 
   return payload.deployment;
+}
+
+export async function removeSpeedAcceleratedDomain(zoneId, accessDomain) {
+  const response = await fetch(
+    `/api/zones/${zoneId}/speed-deploy/${encodeURIComponent(accessDomain)}`,
+    { method: "DELETE" }
+  );
+
+  return readJson(response, "删除加速域名失败");
 }
 
 function accountQuery(accountId) {
@@ -311,6 +425,71 @@ export async function removeWorkerDomain(scriptName, domainId, accountId = "") {
   return readJson(response, "删除 Worker 自定义域失败");
 }
 
+export async function saveWorkerSettings(scriptName, request) {
+  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return readJson(response, "保存 Worker 设置失败");
+}
+
+export async function saveWorkerSecret(scriptName, request) {
+  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/secrets`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const payload = await readJson(response, "保存 Worker Secret 失败");
+
+  return payload.secret;
+}
+
+export async function removeWorkerSecret(scriptName, secretName, accountId = "") {
+  const response = await fetch(
+    `/api/workers/${encodeURIComponent(scriptName)}/secrets/${encodeURIComponent(secretName)}${accountQuery(accountId)}`,
+    { method: "DELETE" }
+  );
+
+  return readJson(response, "删除 Worker Secret 失败");
+}
+
+export async function saveWorkerSchedules(scriptName, request) {
+  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/schedules`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return readJson(response, "保存 Cron Triggers 失败");
+}
+
+export async function fetchWorkerDeployments(scriptName, accountId = "") {
+  const response = await fetch(
+    `/api/workers/${encodeURIComponent(scriptName)}/deployments${accountQuery(accountId)}`
+  );
+  const payload = await readJson(response, "读取 Worker 部署记录失败");
+
+  return payload.deployments;
+}
+
+export async function createWorkerTail(scriptName, accountId = "") {
+  const response = await fetch(
+    `/api/workers/${encodeURIComponent(scriptName)}/tail${accountQuery(accountId)}`,
+    { method: "POST" }
+  );
+
+  return readJson(response, "创建 Worker 日志 Tail 失败");
+}
+
+export async function fetchWorkerQueues(accountId = "") {
+  const response = await fetch(`/api/workers/queues${accountQuery(accountId)}`);
+  const payload = await readJson(response, "读取 Queues 失败");
+
+  return payload.queues;
+}
+
 export async function fetchDeveloperResources(type, accountId = "") {
   const response = await fetch(
     `/api/developer-resources/${encodeURIComponent(type)}${accountQuery(accountId)}`
@@ -340,6 +519,127 @@ export async function removeDeveloperResource(type, resourceId, accountId = "") 
   );
 
   return readJson(response, "删除资源失败");
+}
+
+export async function fetchDeveloperResourceDetail(type, resourceId, accountId = "") {
+  const response = await fetch(
+    `/api/developer-resources/${encodeURIComponent(type)}/${encodeURIComponent(resourceId)}/detail${accountQuery(accountId)}`
+  );
+  const payload = await readJson(response, "读取资源详情失败");
+
+  return payload.resource;
+}
+
+export async function savePagesBuildConfig(resourceId, request) {
+  const response = await fetch(
+    `/api/developer-resources/pages/${encodeURIComponent(resourceId)}/build-config`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "保存 Pages 构建配置失败");
+
+  return payload.resource;
+}
+
+export async function queryD1Database(resourceId, request) {
+  const response = await fetch(
+    `/api/developer-resources/d1/${encodeURIComponent(resourceId)}/query`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "执行 D1 查询失败");
+
+  return payload.result;
+}
+
+export async function putR2Object(resourceId, request) {
+  const response = await fetch(
+    `/api/developer-resources/r2/${encodeURIComponent(resourceId)}/objects`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "上传 R2 对象失败");
+
+  return payload.result;
+}
+
+export async function removeR2Object(resourceId, key, accountId = "") {
+  const params = new URLSearchParams(accountId ? { accountId } : {});
+  params.set("key", key);
+  const response = await fetch(
+    `/api/developer-resources/r2/${encodeURIComponent(resourceId)}/objects?${params.toString()}`,
+    { method: "DELETE" }
+  );
+
+  return readJson(response, "删除 R2 对象失败");
+}
+
+export async function fetchKvValue(resourceId, key, accountId = "") {
+  const params = new URLSearchParams(accountId ? { accountId } : {});
+  params.set("key", key);
+  const response = await fetch(
+    `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values?${params.toString()}`
+  );
+  const payload = await readJson(response, "读取 KV Value 失败");
+
+  return payload.value;
+}
+
+export async function putKvValue(resourceId, request) {
+  const response = await fetch(
+    `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "保存 KV Value 失败");
+
+  return payload.result;
+}
+
+export async function removeKvValue(resourceId, key, accountId = "") {
+  const params = new URLSearchParams(accountId ? { accountId } : {});
+  params.set("key", key);
+  const response = await fetch(
+    `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values?${params.toString()}`,
+    { method: "DELETE" }
+  );
+
+  return readJson(response, "删除 KV Value 失败");
+}
+
+export async function saveTunnelConfiguration(resourceId, request) {
+  const response = await fetch(
+    `/api/developer-resources/tunnels/${encodeURIComponent(resourceId)}/configuration`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "保存 Tunnel 配置失败");
+
+  return payload.result;
+}
+
+export async function fetchTunnelToken(resourceId, accountId = "") {
+  const response = await fetch(
+    `/api/developer-resources/tunnels/${encodeURIComponent(resourceId)}/token${accountQuery(accountId)}`
+  );
+  const payload = await readJson(response, "读取 Tunnel Token 失败");
+
+  return payload.token;
 }
 
 export async function fetchAutomationState(zoneId) {

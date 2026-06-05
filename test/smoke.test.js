@@ -648,6 +648,40 @@ test("reads zone analytics through Cloudflare GraphQL API", async () => {
       body,
     });
 
+    if (
+      request.method === "POST" &&
+      url.pathname === "/graphql" &&
+      body.query.includes("firewallEventsAdaptiveGroups")
+    ) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: {
+            viewer: {
+              zones: [
+                {
+                  firewallEventsAdaptiveGroups: [
+                    {
+                      count: 3,
+                      dimensions: {
+                        action: "block",
+                        clientCountryName: "US",
+                        clientIP: "192.0.2.1",
+                        description: "Block scanner",
+                        source: "waf",
+                        userAgent: "bad-bot",
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        })
+      );
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/graphql") {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
@@ -756,10 +790,11 @@ test("reads zone analytics through Cloudflare GraphQL API", async () => {
         ["404", 20],
       ]
     );
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, 2);
     assert.equal(requests[0].path, "/graphql");
     assert.equal(requests[0].body.variables.zoneTag, zoneId);
     assert.match(requests[0].body.query, /httpRequests1dGroups/);
+    assert.match(requests[1].body.query, /firewallEventsAdaptiveGroups/);
   } finally {
     await panel.stop();
     cloudflareMock.close();
@@ -1186,6 +1221,20 @@ test("reads and deletes custom certificates through Cloudflare certificate APIs"
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/certificates") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          success: true,
+          errors: [],
+          messages: [],
+          result: [],
+          result_info: { page: 1, per_page: 50, total_pages: 1, total_count: 0 },
+        })
+      );
+      return;
+    }
+
     if (
       request.method === "DELETE" &&
       url.pathname === `/zones/${zoneId}/custom_certificates/${certificateId}`
@@ -1243,6 +1292,7 @@ test("reads and deletes custom certificates through Cloudflare certificate APIs"
       [
         ["GET", `/zones/${zoneId}/ssl/universal/settings`],
         ["GET", `/zones/${zoneId}/custom_certificates`],
+        ["GET", "/certificates"],
         ["DELETE", `/zones/${zoneId}/custom_certificates/${certificateId}`],
       ]
     );
@@ -1296,6 +1346,19 @@ test("keeps certificate page usable when custom certificate listing is unavailab
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/certificates") {
+      response.writeHead(403, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          success: false,
+          errors: [{ message: "Origin CA requires permission" }],
+          messages: [],
+          result: null,
+        })
+      );
+      return;
+    }
+
     response.writeHead(404, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ success: false, errors: [{ message: "not found" }] }));
   });
@@ -1320,13 +1383,14 @@ test("keeps certificate page usable when custom certificate listing is unavailab
     assert.equal(response.status, 200);
     assert.equal(payload.universalSsl.enabled, true);
     assert.deepEqual(payload.certificates, []);
-    assert.equal(payload.warnings.length, 1);
+    assert.equal(payload.warnings.length, 2);
     assert.match(payload.warnings[0], /Enterprise/);
     assert.deepEqual(
       requests.map((request) => [request.method, request.path]),
       [
         ["GET", `/zones/${zoneId}/ssl/universal/settings`],
         ["GET", `/zones/${zoneId}/custom_certificates`],
+        ["GET", "/certificates"],
       ]
     );
   } finally {

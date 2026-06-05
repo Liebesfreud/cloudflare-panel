@@ -328,6 +328,138 @@ function renderRulesList() {
   `;
 }
 
+function rulesetRules(phase) {
+  return state.firewallRulesets?.[phase]?.rules || [];
+}
+
+function renderFirewallWarnings() {
+  if (!state.firewallWarnings.length) {
+    return "";
+  }
+
+  return `
+    <div class="firewall-warning-list">
+      ${state.firewallWarnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}
+    </div>
+  `;
+}
+
+function renderRulesetForm() {
+  return `
+    <section class="firewall-create-box">
+      <h3>新版 WAF / 速率限制</h3>
+      <form id="ruleset-rule-form" class="firewall-form">
+        <label class="firewall-field">
+          <span>规则阶段</span>
+          <select name="phase">
+            <option value="http_request_firewall_custom">自定义 WAF 规则</option>
+            <option value="http_ratelimit">Rate Limiting / 防 CC</option>
+          </select>
+        </label>
+        <label class="firewall-field">
+          <span>动作</span>
+          <select name="action">
+            <option value="block">阻止</option>
+            <option value="managed_challenge">托管质询</option>
+            <option value="challenge">质询</option>
+            <option value="js_challenge">JS 质询</option>
+            <option value="log">仅记录</option>
+          </select>
+        </label>
+        <label class="firewall-field">
+          <span>规则描述</span>
+          <input name="description" placeholder="例如: 防 CC 访问首页" />
+        </label>
+        <label class="firewall-field">
+          <span>表达式</span>
+          <textarea name="expression" placeholder='例如: (http.request.uri.path eq "/")'></textarea>
+        </label>
+        <div class="firewall-rate-grid">
+          <label class="firewall-field">
+            <span>周期请求数</span>
+            <input name="requestsPerPeriod" type="number" min="1" value="60" />
+          </label>
+          <label class="firewall-field">
+            <span>统计周期</span>
+            <select name="period">
+              <option value="10">10 秒</option>
+              <option value="60" selected>60 秒</option>
+            </select>
+          </label>
+          <label class="firewall-field">
+            <span>缓解时长</span>
+            <input name="mitigationTimeout" type="number" min="0" value="600" />
+          </label>
+        </div>
+        <div class="firewall-form-actions">
+          <button class="primary-button firewall-form-button" type="submit" ${state.savingRulesetRule ? "disabled" : ""}>
+            ${state.savingRulesetRule ? "创建中..." : "创建新版规则"}
+          </button>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function renderRulesetList(title, phase, emptyText) {
+  const rules = rulesetRules(phase);
+  const rulesetId = state.firewallRulesets?.[phase]?.id || "";
+
+  return `
+    <section class="firewall-rules-section">
+      <div class="firewall-rules-heading">
+        <h3>${escapeHtml(title)}</h3>
+      </div>
+      ${
+        rules.length === 0
+          ? `<div class="firewall-empty-state"><p>${escapeHtml(emptyText)}</p></div>`
+          : `<div class="firewall-rule-list">
+              ${rules
+                .map(
+                  (rule) => `
+                    <article class="firewall-rule-card">
+                      <div class="firewall-rule-content">
+                        <div class="firewall-rule-title-row">
+                          <strong>${escapeHtml(rule.description || rule.id)}</strong>
+                          <span class="firewall-action-badge ${escapeHtml(actionClassNames[rule.action] || "unknown")}">${escapeHtml(String(rule.action || "").toUpperCase())}</span>
+                          <span class="firewall-status-badge ${rule.enabled ? "enabled" : "paused"}">${rule.enabled ? `${icon("check")} 已启用` : `${icon("pause")} 已禁用`}</span>
+                        </div>
+                        <div class="firewall-expression-box">
+                          <span>表达式：</span>
+                          <code>${escapeHtml(rule.expression || "-")}</code>
+                        </div>
+                        ${
+                          rule.ratelimit
+                            ? `<div class="firewall-rule-meta">
+                                <span><strong>请求数:</strong><code>${escapeHtml(rule.ratelimit.requests_per_period)}</code></span>
+                                <span><strong>周期:</strong><code>${escapeHtml(rule.ratelimit.period)}s</code></span>
+                                <span><strong>缓解:</strong><code>${escapeHtml(rule.ratelimit.mitigation_timeout)}s</code></span>
+                              </div>`
+                            : ""
+                        }
+                      </div>
+                      <div class="firewall-rule-actions">
+                        <button
+                          class="secondary-button firewall-icon-action delete-ruleset-rule"
+                          type="button"
+                          data-rule-id="${escapeHtml(rule.id)}"
+                          data-ruleset-id="${escapeHtml(rule.rulesetId || rulesetId)}"
+                          ${state.deletingFirewallRuleId === rule.id ? "disabled" : ""}
+                          title="删除新版规则"
+                        >
+                          ${icon("trash")}
+                        </button>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>`
+      }
+    </section>
+  `;
+}
+
 export function renderFirewallSettingsView() {
   const zone = state.selectedZone || { id: "", name: "", status: "", plan: null };
 
@@ -351,6 +483,10 @@ export function renderFirewallSettingsView() {
         </div>
 
         <div class="firewall-panel-body">
+          ${renderFirewallWarnings()}
+          ${renderRulesetForm()}
+          ${renderRulesetList("自定义 WAF 规则", "http_request_firewall_custom", "暂无新版 WAF 规则")}
+          ${renderRulesetList("Rate Limiting / 防 CC", "http_ratelimit", "暂无速率限制规则")}
           ${renderFirewallForm()}
 
           <section class="firewall-rules-section">

@@ -1,8 +1,18 @@
 import {
   createDeveloperResource,
   createWorker,
+  fetchDeveloperResourceDetail,
   fetchDeveloperResources,
+  fetchKvValue,
+  fetchTunnelToken,
+  putKvValue,
+  putR2Object,
+  queryD1Database,
+  removeKvValue,
+  removeR2Object,
   removeDeveloperResource,
+  savePagesBuildConfig,
+  saveTunnelConfiguration,
 } from "../api.js";
 import { state } from "../state.js";
 
@@ -38,6 +48,14 @@ function resetResourceModal() {
   state.developerResourceDeleteName = "";
   state.developerResourceDeleteConfirm = "";
   state.developerResourceSaving = false;
+}
+
+function clearResourceDetail() {
+  state.developerResourceActiveId = "";
+  state.developerResourceDetail = null;
+  state.developerResourceDetailLoading = false;
+  state.developerResourceDetailNotice = "";
+  state.developerResourceTunnelToken = null;
 }
 
 function loadTemplatesFromStorage() {
@@ -124,6 +142,7 @@ export function createDeveloperResourcesActions({ renderApp }) {
 
     try {
       applyResourcePayload(await fetchDeveloperResources(type, activeAccountId()));
+      clearResourceDetail();
     } catch (error) {
       state.developerResourceNotice = error.message;
     } finally {
@@ -148,6 +167,224 @@ export function createDeveloperResourcesActions({ renderApp }) {
   function closeDeveloperResourceModal() {
     resetResourceModal();
     renderApp();
+  }
+
+  async function openDeveloperResourceDetail(resourceId) {
+    const type = activeType();
+
+    if (!resourceId || !cloudflareResourceTypes.has(type)) {
+      return;
+    }
+
+    state.developerResourceActiveId = resourceId;
+    state.developerResourceDetail = null;
+    state.developerResourceDetailLoading = true;
+    state.developerResourceDetailNotice = "";
+    state.developerResourceTunnelToken = null;
+    renderApp();
+
+    try {
+      state.developerResourceDetail = await fetchDeveloperResourceDetail(
+        type,
+        resourceId,
+        activeAccountId()
+      );
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
+  }
+
+  function closeDeveloperResourceDetail() {
+    clearResourceDetail();
+    renderApp();
+  }
+
+  async function submitPagesBuildConfig(event) {
+    event.preventDefault();
+    const formData = readForm("#pages-build-form");
+
+    state.developerResourceDetailLoading = true;
+    renderApp();
+
+    try {
+      await savePagesBuildConfig(state.developerResourceActiveId, {
+        accountId: activeAccountId(),
+        productionBranch: String(formData.get("productionBranch") || "").trim(),
+        buildCommand: String(formData.get("buildCommand") || "").trim(),
+        destinationDir: String(formData.get("destinationDir") || "").trim(),
+        rootDir: String(formData.get("rootDir") || "").trim(),
+      });
+      state.developerResourceDetailNotice = "Pages 构建配置已保存";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
+  }
+
+  async function submitD1Query(event) {
+    event.preventDefault();
+    const formData = readForm("#d1-query-form");
+    state.developerResourceSqlDraft = String(formData.get("sql") || "").trim();
+    state.developerResourceDetailLoading = true;
+    renderApp();
+
+    try {
+      const result = await queryD1Database(state.developerResourceActiveId, {
+        accountId: activeAccountId(),
+        sql: state.developerResourceSqlDraft,
+      });
+      state.developerResourceDetail = {
+        ...state.developerResourceDetail,
+        extras: {
+          ...(state.developerResourceDetail?.extras || {}),
+          queryResults: result.results,
+        },
+      };
+      state.developerResourceDetailNotice = "D1 查询已执行";
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
+  }
+
+  async function submitR2Object(event) {
+    event.preventDefault();
+    const formData = readForm("#r2-object-form");
+    const key = String(formData.get("key") || "").trim();
+    const content = String(formData.get("content") || "");
+    state.developerResourceDetailLoading = true;
+    renderApp();
+
+    try {
+      await putR2Object(state.developerResourceActiveId, {
+        accountId: activeAccountId(),
+        key,
+        content,
+        contentType: "text/plain; charset=utf-8",
+      });
+      state.developerResourceDetailNotice = "R2 对象已上传";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
+  }
+
+  async function deleteR2Object(key) {
+    if (!key || !window.confirm("确定删除这个 R2 对象吗？")) {
+      return;
+    }
+
+    try {
+      await removeR2Object(state.developerResourceActiveId, key, activeAccountId());
+      state.developerResourceDetailNotice = "R2 对象已删除";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+      renderApp();
+    }
+  }
+
+  async function readKvValue(key) {
+    if (!key) {
+      return;
+    }
+
+    state.developerResourceKvKey = key;
+    state.developerResourceDetailLoading = true;
+    renderApp();
+
+    try {
+      const value = await fetchKvValue(state.developerResourceActiveId, key, activeAccountId());
+      state.developerResourceKvValue = value.value || "";
+      state.developerResourceDetailNotice = "KV Value 已读取";
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
+  }
+
+  async function submitKvValue(event) {
+    event.preventDefault();
+    const formData = readForm("#kv-value-form");
+    const key = String(formData.get("key") || "").trim();
+    const value = String(formData.get("value") || "");
+
+    try {
+      await putKvValue(state.developerResourceActiveId, {
+        accountId: activeAccountId(),
+        key,
+        value,
+      });
+      state.developerResourceDetailNotice = "KV Value 已保存";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+      renderApp();
+    }
+  }
+
+  async function deleteKvValue(key) {
+    if (!key || !window.confirm("确定删除这个 KV Key 吗？")) {
+      return;
+    }
+
+    try {
+      await removeKvValue(state.developerResourceActiveId, key, activeAccountId());
+      state.developerResourceDetailNotice = "KV Key 已删除";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+      renderApp();
+    }
+  }
+
+  async function submitTunnelConfiguration(event) {
+    event.preventDefault();
+    const formData = readForm("#tunnel-config-form");
+
+    try {
+      const config = JSON.parse(String(formData.get("config") || "{}"));
+      await saveTunnelConfiguration(state.developerResourceActiveId, {
+        accountId: activeAccountId(),
+        config,
+      });
+      state.developerResourceDetailNotice = "Tunnel 配置已保存";
+      await openDeveloperResourceDetail(state.developerResourceActiveId);
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+      renderApp();
+    }
+  }
+
+  async function loadTunnelToken() {
+    state.developerResourceDetailLoading = true;
+    renderApp();
+
+    try {
+      state.developerResourceTunnelToken = await fetchTunnelToken(
+        state.developerResourceActiveId,
+        activeAccountId()
+      );
+      state.developerResourceDetailNotice = "Tunnel Token 已读取";
+    } catch (error) {
+      state.developerResourceDetailNotice = error.message;
+    } finally {
+      state.developerResourceDetailLoading = false;
+      renderApp();
+    }
   }
 
   async function submitDeveloperResource(event) {
@@ -341,17 +578,28 @@ export function createDeveloperResourcesActions({ renderApp }) {
   return {
     changeDeveloperResourceAccount,
     closeDeveloperResourceModal,
+    closeDeveloperResourceDetail,
     closeWorkerTemplateModal,
     confirmDeleteDeveloperResource,
     createWorkerFromTemplate,
+    deleteKvValue,
+    deleteR2Object,
     deleteWorkerTemplate,
     ensureDeveloperResourcesLoaded,
     loadDeveloperResources,
     openDeveloperResourceCreateModal,
+    openDeveloperResourceDetail,
     openWorkerTemplateModal,
+    loadTunnelToken,
+    readKvValue,
     reloadWorkerTemplates,
     requestDeleteDeveloperResource,
     submitDeveloperResource,
+    submitD1Query,
+    submitKvValue,
+    submitPagesBuildConfig,
+    submitR2Object,
+    submitTunnelConfiguration,
     submitWorkerTemplate,
     updateDeveloperResourceDeleteConfirm,
     useWorkerTemplate,

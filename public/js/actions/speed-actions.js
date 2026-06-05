@@ -1,4 +1,8 @@
-import { deploySpeedAcceleration } from "../api.js";
+import {
+  deploySpeedAcceleration,
+  fetchSpeedAcceleratedDomains,
+  removeSpeedAcceleratedDomain,
+} from "../api.js";
 import { defaultSpeedForm } from "../constants.js";
 import { state } from "../state.js";
 
@@ -94,6 +98,10 @@ function makeAcceleratedDomain(form, deployment) {
 
 function speedDomainIdentity(domain) {
   return String(domain?.id || domain?.accessDomain || domain?.domain || "");
+}
+
+function zoneForSpeedDomain(domain) {
+  return findZoneForAccessDomain(domain.accessDomain || domain.domain || "");
 }
 
 export function createSpeedActions({ renderApp }) {
@@ -232,6 +240,7 @@ export function createSpeedActions({ renderApp }) {
   function openSpeedDomainsDialog() {
     state.speedDomainsOpen = true;
     renderApp();
+    refreshSpeedDomainsDialog();
   }
 
   function closeSpeedDomainsDialog() {
@@ -240,8 +249,32 @@ export function createSpeedActions({ renderApp }) {
     renderApp();
   }
 
-  function refreshSpeedDomainsDialog() {
+  async function refreshSpeedDomainsDialog() {
+    state.speedDomainsLoading = true;
+    state.speedNotice = "";
     renderApp();
+
+    try {
+      const results = await Promise.all(
+        state.zones.map((zone) =>
+          fetchSpeedAcceleratedDomains(zone.id)
+            .then((payload) =>
+              (payload.domains || []).map((domain) => ({
+                ...domain,
+                zoneId: zone.id,
+                zoneName: zone.name,
+              }))
+            )
+            .catch(() => [])
+        )
+      );
+      state.speedAcceleratedDomains = results.flat();
+    } catch (error) {
+      showSpeedNotice(error.message);
+    } finally {
+      state.speedDomainsLoading = false;
+      renderApp();
+    }
   }
 
   function requestDeleteSpeedDomain(domainId) {
@@ -254,18 +287,37 @@ export function createSpeedActions({ renderApp }) {
     renderApp();
   }
 
-  function confirmDeleteSpeedDomain() {
+  async function confirmDeleteSpeedDomain() {
     const deleteId = String(state.speedDomainDeleteId || "");
 
     if (!deleteId) {
       return;
     }
 
-    state.speedAcceleratedDomains = state.speedAcceleratedDomains.filter(
-      (domain) => speedDomainIdentity(domain) !== deleteId
+    const domain = state.speedAcceleratedDomains.find(
+      (item) => speedDomainIdentity(item) === deleteId
     );
-    state.speedDomainDeleteId = "";
+    const zone = domain?.zoneId ? { id: domain.zoneId } : zoneForSpeedDomain(domain || {});
+
+    if (!domain || !zone?.id) {
+      showSpeedNotice("未找到加速域名所属 Zone");
+      return;
+    }
+
+    state.speedDomainsLoading = true;
     renderApp();
+
+    try {
+      await removeSpeedAcceleratedDomain(zone.id, domain.accessDomain || domain.domain);
+      state.speedDomainDeleteId = "";
+      await refreshSpeedDomainsDialog();
+      showSpeedNotice("加速域名已删除");
+    } catch (error) {
+      showSpeedNotice(error.message);
+    } finally {
+      state.speedDomainsLoading = false;
+      renderApp();
+    }
   }
 
   return {

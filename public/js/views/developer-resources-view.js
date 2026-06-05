@@ -235,6 +235,13 @@ function renderResourceRows(type) {
                 </div>
               </div>
               <button
+                class="devres-outline-button devres-open-detail"
+                type="button"
+                data-devres-id="${escapeHtml(item.id)}"
+              >
+                管理
+              </button>
+              <button
                 class="devres-icon-danger devres-delete-request"
                 type="button"
                 data-devres-id="${escapeHtml(item.id)}"
@@ -249,6 +256,224 @@ function renderResourceRows(type) {
         )
         .join("")}
     </div>
+  `;
+}
+
+function renderDetailNotice() {
+  if (!state.developerResourceDetailNotice) {
+    return "";
+  }
+
+  return `<div class="devres-notice">${escapeHtml(state.developerResourceDetailNotice)}</div>`;
+}
+
+function renderSimpleList(items, emptyText, renderItem) {
+  if (!items?.length) {
+    return `<p class="devres-muted">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <div class="devres-detail-list">
+      ${items.map(renderItem).join("")}
+    </div>
+  `;
+}
+
+function renderPagesDetail(detail) {
+  const deployments = detail.extras?.deployments || [];
+  const domains = detail.extras?.domains || [];
+
+  return `
+    <form class="devres-detail-form" id="pages-build-form">
+      <label class="devres-field">
+        <span>生产分支</span>
+        <input name="productionBranch" value="${escapeHtml(detail.item?.badge || "main")}" />
+      </label>
+      <label class="devres-field">
+        <span>构建命令</span>
+        <input name="buildCommand" placeholder="npm run build" />
+      </label>
+      <label class="devres-field">
+        <span>输出目录</span>
+        <input name="destinationDir" placeholder="dist" />
+      </label>
+      <label class="devres-field">
+        <span>根目录</span>
+        <input name="rootDir" placeholder="/" />
+      </label>
+      <button class="devres-primary-button" type="submit">保存构建配置</button>
+    </form>
+    <div class="devres-detail-grid">
+      <section>
+        <h3>部署记录</h3>
+        ${renderSimpleList(deployments, "暂无部署记录", (deployment) => `
+          <div class="devres-detail-row">
+            <span>${escapeHtml(deployment.id || deployment.url || "-")}</span>
+            <em>${escapeHtml(deployment.status || deployment.environment || "-")}</em>
+          </div>
+        `)}
+      </section>
+      <section>
+        <h3>自定义域</h3>
+        ${renderSimpleList(domains, "暂无自定义域", (domain) => `
+          <div class="devres-detail-row">
+            <span>${escapeHtml(domain.name)}</span>
+            <em>${escapeHtml(domain.status || "-")}</em>
+          </div>
+        `)}
+      </section>
+    </div>
+  `;
+}
+
+function renderD1Detail(detail) {
+  const tables = detail.extras?.tables || [];
+  const results = detail.extras?.queryResults || [];
+
+  return `
+    <form class="devres-detail-form" id="d1-query-form">
+      <label class="devres-field">
+        <span>SQL 查询</span>
+        <textarea name="sql">${escapeHtml(state.developerResourceSqlDraft)}</textarea>
+      </label>
+      <button class="devres-primary-button" type="submit">执行查询</button>
+    </form>
+    <div class="devres-detail-grid">
+      <section>
+        <h3>数据表</h3>
+        ${renderSimpleList(tables.map((name) => ({ name })), "暂无表数据", (table) => `
+          <div class="devres-detail-row"><span>${escapeHtml(table.name)}</span></div>
+        `)}
+      </section>
+      <section>
+        <h3>查询结果</h3>
+        ${
+          results.length
+            ? `<pre class="devres-code-block">${escapeHtml(JSON.stringify(results, null, 2))}</pre>`
+            : `<p class="devres-muted">执行查询后显示结果</p>`
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderR2Detail(detail) {
+  const objects = detail.extras?.objects || [];
+
+  return `
+    <form class="devres-detail-form" id="r2-object-form">
+      <label class="devres-field">
+        <span>对象 Key</span>
+        <input name="key" placeholder="path/file.txt" />
+      </label>
+      <label class="devres-field">
+        <span>对象内容</span>
+        <textarea name="content" placeholder="文本内容"></textarea>
+      </label>
+      <button class="devres-primary-button" type="submit">上传对象</button>
+    </form>
+    <section>
+      <h3>对象列表</h3>
+      ${renderSimpleList(objects, "暂无对象", (object) => `
+        <div class="devres-detail-row">
+          <span>${escapeHtml(object.key)}</span>
+          <em>${escapeHtml(`${object.size || 0} B`)}</em>
+          <button class="devres-icon-danger r2-object-delete" type="button" data-object-key="${escapeHtml(object.key)}">${icon("trash")}</button>
+        </div>
+      `)}
+    </section>
+  `;
+}
+
+function renderKvDetail(detail) {
+  const keys = detail.extras?.keys || [];
+
+  return `
+    <form class="devres-detail-form" id="kv-value-form">
+      <label class="devres-field">
+        <span>Key</span>
+        <input name="key" value="${escapeHtml(state.developerResourceKvKey)}" placeholder="config:main" />
+      </label>
+      <label class="devres-field">
+        <span>Value</span>
+        <textarea name="value">${escapeHtml(state.developerResourceKvValue)}</textarea>
+      </label>
+      <button class="devres-primary-button" type="submit">保存 Value</button>
+    </form>
+    <section>
+      <h3>Key 列表</h3>
+      ${renderSimpleList(keys, "暂无 Key", (item) => `
+        <div class="devres-detail-row">
+          <span>${escapeHtml(item.name)}</span>
+          <button class="devres-outline-button kv-key-read" type="button" data-kv-key="${escapeHtml(item.name)}">读取</button>
+          <button class="devres-icon-danger kv-key-delete" type="button" data-kv-key="${escapeHtml(item.name)}">${icon("trash")}</button>
+        </div>
+      `)}
+    </section>
+  `;
+}
+
+function renderTunnelDetail(detail) {
+  const config = detail.extras?.configuration || { config: { ingress: [] } };
+
+  return `
+    <form class="devres-detail-form" id="tunnel-config-form">
+      <label class="devres-field">
+        <span>Ingress 配置 JSON</span>
+        <textarea name="config">${escapeHtml(JSON.stringify(config.config || config, null, 2))}</textarea>
+      </label>
+      <button class="devres-primary-button" type="submit">保存配置</button>
+    </form>
+    <section class="devres-token-box">
+      <div>
+        <h3>Connector Token</h3>
+        <p>只在点击时读取，请妥善保存。</p>
+      </div>
+      <button class="devres-outline-button" id="tunnel-token-load" type="button">读取 Token</button>
+      ${
+        state.developerResourceTunnelToken?.token
+          ? `<pre class="devres-code-block">${escapeHtml(state.developerResourceTunnelToken.token)}</pre>`
+          : ""
+      }
+    </section>
+  `;
+}
+
+function renderResourceDetail(type) {
+  if (!state.developerResourceActiveId) {
+    return "";
+  }
+
+  const detail = state.developerResourceDetail;
+  const body = state.developerResourceDetailLoading && !detail
+    ? `<div class="devres-empty"><span class="spinner"></span><strong>加载详情...</strong></div>`
+    : !detail
+      ? `<div class="devres-empty"><strong>资源详情加载失败</strong></div>`
+      : type === "pages"
+        ? renderPagesDetail(detail)
+        : type === "d1"
+          ? renderD1Detail(detail)
+          : type === "r2"
+            ? renderR2Detail(detail)
+            : type === "kv"
+              ? renderKvDetail(detail)
+              : renderTunnelDetail(detail);
+
+  return `
+    <section class="devres-card devres-detail-card">
+      <div class="devres-card-heading">
+        <div>
+          <h2>资源管理: ${escapeHtml(state.developerResourceActiveId)}</h2>
+          <p>深层配置和数据操作会直接同步到 Cloudflare。</p>
+        </div>
+        <button class="devres-outline-button" id="devres-detail-close" type="button">关闭</button>
+      </div>
+      <div class="devres-detail-body">
+        ${renderDetailNotice()}
+        ${detail?.warnings?.length ? `<div class="devres-warning-list">${detail.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
+        ${body}
+      </div>
+    </section>
   `;
 }
 
@@ -370,6 +595,7 @@ function renderCloudflareResourceView(type, meta) {
           </div>
           ${renderResourceRows(type)}
         </section>
+        ${renderResourceDetail(type)}
       </div>
     </section>
     ${renderCreateModal(type)}

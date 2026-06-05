@@ -20,7 +20,10 @@ export function bindEvents(actions) {
   document.querySelector("#purge-all-cache")?.addEventListener("click", actions.purgeAllCache);
   document.querySelector("#purge-url-form")?.addEventListener("submit", actions.purgeCacheByUrl);
   document.querySelector("#firewall-rule-form")?.addEventListener("submit", actions.saveFirewallRule);
+  document.querySelector("#ruleset-rule-form")?.addEventListener("submit", actions.saveRulesetRule);
   document.querySelector("#page-rule-form")?.addEventListener("submit", actions.savePageRule);
+  document.querySelector("#certificate-upload-form")?.addEventListener("submit", actions.submitCustomCertificate);
+  document.querySelector("#origin-certificate-form")?.addEventListener("submit", actions.submitOriginCertificate);
   document
     .querySelector("#firewall-rule-type")
     ?.addEventListener("change", actions.syncFirewallRuleType);
@@ -84,6 +87,16 @@ export function bindEvents(actions) {
   document
     .querySelector("#worker-domain-form")
     ?.addEventListener("submit", actions.submitWorkerDomain);
+  document
+    .querySelector("#worker-binding-form")
+    ?.addEventListener("submit", actions.submitWorkerBinding);
+  document
+    .querySelector("#worker-secret-form")
+    ?.addEventListener("submit", actions.submitWorkerSecret);
+  document
+    .querySelector("#worker-cron-form")
+    ?.addEventListener("submit", actions.submitWorkerSchedules);
+  document.querySelector("#worker-tail-open")?.addEventListener("click", actions.openWorkerTail);
   document.querySelectorAll("[data-worker-tab]").forEach((button) => {
     button.addEventListener("click", actions.changeWorkerTab);
   });
@@ -100,6 +113,9 @@ export function bindEvents(actions) {
   });
   document.querySelectorAll(".worker-domain-delete").forEach((button) => {
     button.addEventListener("click", () => actions.deleteWorkerDomain(button.dataset.domainId));
+  });
+  document.querySelectorAll(".worker-secret-delete").forEach((button) => {
+    button.addEventListener("click", () => actions.deleteWorkerSecret(button.dataset.secretName));
   });
   document
     .querySelector("#worker-delete-confirm-input")
@@ -126,6 +142,33 @@ export function bindEvents(actions) {
     button.addEventListener("click", () =>
       actions.requestDeleteDeveloperResource(button.dataset.devresId, button.dataset.devresName)
     );
+  });
+  document.querySelectorAll(".devres-open-detail").forEach((button) => {
+    button.addEventListener("click", () =>
+      actions.openDeveloperResourceDetail(button.dataset.devresId)
+    );
+  });
+  document
+    .querySelector("#devres-detail-close")
+    ?.addEventListener("click", actions.closeDeveloperResourceDetail);
+  document
+    .querySelector("#pages-build-form")
+    ?.addEventListener("submit", actions.submitPagesBuildConfig);
+  document.querySelector("#d1-query-form")?.addEventListener("submit", actions.submitD1Query);
+  document.querySelector("#r2-object-form")?.addEventListener("submit", actions.submitR2Object);
+  document.querySelector("#kv-value-form")?.addEventListener("submit", actions.submitKvValue);
+  document
+    .querySelector("#tunnel-config-form")
+    ?.addEventListener("submit", actions.submitTunnelConfiguration);
+  document.querySelector("#tunnel-token-load")?.addEventListener("click", actions.loadTunnelToken);
+  document.querySelectorAll(".r2-object-delete").forEach((button) => {
+    button.addEventListener("click", () => actions.deleteR2Object(button.dataset.objectKey));
+  });
+  document.querySelectorAll(".kv-key-read").forEach((button) => {
+    button.addEventListener("click", () => actions.readKvValue(button.dataset.kvKey));
+  });
+  document.querySelectorAll(".kv-key-delete").forEach((button) => {
+    button.addEventListener("click", () => actions.deleteKvValue(button.dataset.kvKey));
   });
   document
     .querySelector("#devres-delete-confirm-input")
@@ -199,6 +242,9 @@ export function bindEvents(actions) {
       actions.changeAnalyticsRange(button.dataset.analyticsRange)
     );
   });
+  document
+    .querySelector("#analytics-range-form")
+    ?.addEventListener("submit", actions.submitAnalyticsRange);
   document.querySelector("#focus-firewall-form")?.addEventListener("click", () => {
     document.querySelector("#firewall-rule-form")?.scrollIntoView({
       behavior: "smooth",
@@ -246,6 +292,13 @@ export function bindEvents(actions) {
     input.addEventListener("change", () => actions.toggleCacheSetting(input));
   });
 
+  document.querySelectorAll("[data-ssl-setting]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const value = input.type === "checkbox" ? input.checked : input.value;
+      actions.updateSslSetting(input.dataset.sslSetting, value);
+    });
+  });
+
   document.querySelectorAll(".delete-firewall-rule").forEach((button) => {
     button.addEventListener("click", () => actions.deleteFirewallRule(button.dataset.ruleId));
   });
@@ -273,6 +326,18 @@ export function bindEvents(actions) {
   document.querySelectorAll(".delete-certificate").forEach((button) => {
     button.addEventListener("click", () =>
       actions.deleteCustomCertificate(button.dataset.certificateId)
+    );
+  });
+
+  document.querySelectorAll(".delete-origin-certificate").forEach((button) => {
+    button.addEventListener("click", () =>
+      actions.deleteOriginCertificate(button.dataset.certificateId)
+    );
+  });
+
+  document.querySelectorAll(".delete-ruleset-rule").forEach((button) => {
+    button.addEventListener("click", () =>
+      actions.deleteRulesetRule(button.dataset.ruleId, button.dataset.rulesetId)
     );
   });
 

@@ -228,7 +228,9 @@ function renderSpeedDomainsBody() {
   }
 
   if (!state.speedAcceleratedDomains.length) {
-    return `<div class="speed-domains-empty speed-domains-empty-simple">暂无已加速的域名</div>`;
+    return state.speedDomainsLoading
+      ? `<div class="speed-domains-empty speed-domains-empty-simple"><span class="spinner"></span>正在同步 Cloudflare...</div>`
+      : `<div class="speed-domains-empty speed-domains-empty-simple">暂无已加速的域名</div>`;
   }
 
   return `
@@ -246,6 +248,7 @@ function renderSpeedDomainsBody() {
                 <small>
                   源站 ${escapeHtml(domain.targetDomain || domain.originUrl || "-")} ·
                   优选 ${escapeHtml(domain.optimizedDomain || domain.targetDomain || "-")}
+                  ${domain.zoneName ? ` · Zone ${escapeHtml(domain.zoneName)}` : ""}
                 </small>
               </div>
               <button
@@ -308,7 +311,7 @@ function renderSpeedDeleteDialog() {
           <h2 id="speed-delete-title">确认删除</h2>
           <p>
             确定要删除加速域名 <strong>${escapeHtml(domainName || "-")}</strong> 吗？<br>
-            此操作只会从当前面板列表中移除。
+            此操作会删除面板管理的访问域名 CNAME 和 SaaS 自定义主机名。
           </p>
         </div>
         <div class="speed-delete-actions">

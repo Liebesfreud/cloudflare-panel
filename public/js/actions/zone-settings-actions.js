@@ -1,17 +1,24 @@
 import {
   createFirewallRule,
   createPageRule,
+  createOriginCertificate,
+  createRulesetRule,
   fetchCacheSettings,
   fetchCertificates,
   fetchFirewallRules,
   fetchPageRules,
+  fetchSslSettings,
   purgeCache,
   removeCustomCertificate,
   removeFirewallRule,
+  removeOriginCertificate,
   removePageRule,
+  removeRulesetRule,
+  saveSslSettings,
   saveCacheSettings,
   updateFirewallRule,
   updatePageRule,
+  uploadCustomCertificate,
 } from "../api.js";
 import { defaultFirewallForm, defaultPageRuleForm } from "../constants.js";
 import { findFirewallExample } from "../firewall-examples.js";
@@ -35,6 +42,62 @@ function readFirewallForm() {
     action: String(formData.get("action") || defaultFirewallForm.action),
     target: String(formData.get("target") || "").trim(),
     description: String(formData.get("description") || "").trim(),
+  };
+}
+
+function readRulesetForm() {
+  const form = document.querySelector("#ruleset-rule-form");
+
+  if (!form) {
+    return {};
+  }
+
+  const formData = new FormData(form);
+  const phase = String(formData.get("phase") || "http_request_firewall_custom");
+
+  return {
+    phase,
+    action: String(formData.get("action") || "block"),
+    expression: String(formData.get("expression") || "").trim(),
+    description: String(formData.get("description") || "").trim(),
+    requestsPerPeriod: Number(formData.get("requestsPerPeriod") || 60),
+    period: Number(formData.get("period") || 60),
+    mitigationTimeout: Number(formData.get("mitigationTimeout") || 600),
+  };
+}
+
+function readCertificateUploadForm() {
+  const form = document.querySelector("#certificate-upload-form");
+
+  if (!form) {
+    return {};
+  }
+
+  const formData = new FormData(form);
+
+  return {
+    certificate: String(formData.get("certificate") || "").trim(),
+    privateKey: String(formData.get("privateKey") || "").trim(),
+    certificateChain: String(formData.get("certificateChain") || "").trim(),
+    priority: String(formData.get("priority") || "").trim(),
+    bundleMethod: String(formData.get("bundleMethod") || "ubiquitous"),
+  };
+}
+
+function readOriginCertificateForm() {
+  const form = document.querySelector("#origin-certificate-form");
+
+  if (!form) {
+    return {};
+  }
+
+  const formData = new FormData(form);
+
+  return {
+    hostnames: String(formData.get("hostnames") || "").trim(),
+    requestedValidity: Number(formData.get("requestedValidity") || 5475),
+    requestType: String(formData.get("requestType") || "origin-rsa"),
+    csr: String(formData.get("csr") || "").trim(),
   };
 }
 
@@ -63,6 +126,11 @@ function readPageRuleForm() {
 function applyCachePayload(payload) {
   state.cacheSettings = payload.settings || null;
   state.cacheWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+}
+
+function applySslPayload(payload) {
+  state.sslSettings = payload?.settings || null;
+  state.sslWarnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
 }
 
 function readFirewallRuleForm(rule) {
@@ -137,8 +205,17 @@ function applyCertificatePayload(payload) {
   state.customCertificates = Array.isArray(payload.certificates)
     ? payload.certificates
     : [];
+  state.originCertificates = Array.isArray(payload.originCertificates)
+    ? payload.originCertificates
+    : [];
   state.universalSsl = payload.universalSsl || null;
   state.certificateWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+}
+
+function applyFirewallPayload(payload) {
+  state.firewallRules = Array.isArray(payload?.rules) ? payload.rules : [];
+  state.firewallRulesets = payload?.rulesets || null;
+  state.firewallWarnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
 }
 
 export function createZoneSettingsActions({ renderApp }) {
@@ -175,7 +252,7 @@ export function createZoneSettingsActions({ renderApp }) {
     renderApp();
 
     try {
-      state.firewallRules = await fetchFirewallRules(zoneId);
+      applyFirewallPayload(await fetchFirewallRules(zoneId));
     } catch (error) {
       state.firewallError = error.message;
     } finally {
@@ -226,9 +303,35 @@ export function createZoneSettingsActions({ renderApp }) {
     }
   }
 
+  async function loadSslSettings() {
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId) {
+      return;
+    }
+
+    state.loadingSslSettings = true;
+    state.sslError = "";
+    renderApp();
+
+    try {
+      applySslPayload(await fetchSslSettings(zoneId));
+    } catch (error) {
+      state.sslError = error.message;
+    } finally {
+      state.loadingSslSettings = false;
+      renderApp();
+    }
+  }
+
   async function refreshZoneSettings() {
     if (state.zoneSection === "cache") {
       await loadCacheSettings();
+      return;
+    }
+
+    if (state.zoneSection === "ssl") {
+      await loadSslSettings();
       return;
     }
 
@@ -265,6 +368,28 @@ export function createZoneSettingsActions({ renderApp }) {
       state.notice = error.message;
     } finally {
       state.savingCacheSettings = false;
+      renderApp();
+    }
+  }
+
+  async function updateSslSetting(key, value) {
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || state.savingSslSettings) {
+      return;
+    }
+
+    state.savingSslSettings = true;
+    state.notice = "";
+    renderApp();
+
+    try {
+      applySslPayload(await saveSslSettings(zoneId, { [key]: value }));
+      state.notice = "SSL/TLS 设置已保存";
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.savingSslSettings = false;
       renderApp();
     }
   }
@@ -439,6 +564,56 @@ export function createZoneSettingsActions({ renderApp }) {
       state.notice = error.message;
     } finally {
       state.savingFirewallRule = false;
+      renderApp();
+    }
+  }
+
+  async function saveRulesetRule(event) {
+    event.preventDefault();
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || state.savingRulesetRule) {
+      return;
+    }
+
+    state.savingRulesetRule = true;
+    state.notice = "";
+    renderApp();
+
+    try {
+      await createRulesetRule(zoneId, readRulesetForm());
+      state.notice = "新版防火墙规则已创建";
+      await loadFirewallRules();
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.savingRulesetRule = false;
+      renderApp();
+    }
+  }
+
+  async function deleteRulesetRule(ruleId, rulesetId) {
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || !ruleId || !rulesetId || state.deletingFirewallRuleId) {
+      return;
+    }
+
+    if (!window.confirm("确定删除这条新版防火墙规则吗？")) {
+      return;
+    }
+
+    state.deletingFirewallRuleId = ruleId;
+    renderApp();
+
+    try {
+      await removeRulesetRule(zoneId, rulesetId, ruleId);
+      state.notice = "新版防火墙规则已删除";
+      await loadFirewallRules();
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.deletingFirewallRuleId = "";
       renderApp();
     }
   }
@@ -676,16 +851,96 @@ export function createZoneSettingsActions({ renderApp }) {
     }
   }
 
+  async function submitCustomCertificate(event) {
+    event.preventDefault();
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || state.savingCertificate) {
+      return;
+    }
+
+    state.savingCertificate = true;
+    state.notice = "";
+    renderApp();
+
+    try {
+      await uploadCustomCertificate(zoneId, readCertificateUploadForm());
+      state.notice = "自定义证书已上传";
+      await loadCertificates();
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.savingCertificate = false;
+      renderApp();
+    }
+  }
+
+  async function submitOriginCertificate(event) {
+    event.preventDefault();
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || state.savingCertificate) {
+      return;
+    }
+
+    state.savingCertificate = true;
+    state.notice = "";
+    renderApp();
+
+    try {
+      const certificate = await createOriginCertificate(zoneId, readOriginCertificateForm());
+      state.originCertificateCreated = certificate;
+      state.notice = certificate.certificate
+        ? "Origin CA 证书已创建，请立即复制证书内容并妥善保存"
+        : "Origin CA 证书已创建";
+      await loadCertificates();
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.savingCertificate = false;
+      renderApp();
+    }
+  }
+
+  async function deleteOriginCertificate(certificateId) {
+    const zoneId = readSelectedZoneId();
+
+    if (!zoneId || !certificateId || state.deletingCertificateId) {
+      return;
+    }
+
+    if (!window.confirm("确定删除这个 Origin CA 证书吗？")) {
+      return;
+    }
+
+    state.deletingCertificateId = certificateId;
+    renderApp();
+
+    try {
+      await removeOriginCertificate(zoneId, certificateId);
+      state.notice = "Origin CA 证书已删除";
+      await loadCertificates();
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.deletingCertificateId = "";
+      renderApp();
+    }
+  }
+
   return {
     deleteCustomCertificate,
     deleteFirewallRule,
+    deleteOriginCertificate,
     deletePageRule,
+    deleteRulesetRule,
     editFirewallRule,
     editPageRule,
     loadCertificates,
     loadCacheSettings,
     loadFirewallRules,
     loadPageRules,
+    loadSslSettings,
     purgeAllCache,
     purgeCacheByUrl,
     refreshZoneSettings,
@@ -693,11 +948,15 @@ export function createZoneSettingsActions({ renderApp }) {
     saveCacheLevel,
     saveFirewallRule,
     savePageRule,
+    saveRulesetRule,
+    submitCustomCertificate,
+    submitOriginCertificate,
     resetPageRuleForm: resetPageRuleFormAction,
     resetFirewallRuleForm,
     syncPageRuleExclusiveFields,
     syncFirewallRuleType,
     toggleCacheSetting,
+    updateSslSetting,
     toggleFirewallExamples,
     toggleFirewallRule,
     togglePageRule,

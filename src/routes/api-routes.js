@@ -1,4 +1,88 @@
 function matchRoute(method, pathname) {
+  if (pathname === "/api/workers/queues") {
+    return {
+      key: `${method} /api/workers/queues`,
+      params: {},
+    };
+  }
+
+  const developerResourcePagesBuildConfigMatch = pathname.match(
+    /^\/api\/developer-resources\/pages\/(?<resourceId>[^/]{1,256})\/build-config$/i
+  );
+
+  if (developerResourcePagesBuildConfigMatch) {
+    return {
+      key: `${method} /api/developer-resources/pages/:resourceId/build-config`,
+      params: { ...developerResourcePagesBuildConfigMatch.groups, type: "pages" },
+    };
+  }
+
+  const developerResourceD1QueryMatch = pathname.match(
+    /^\/api\/developer-resources\/d1\/(?<resourceId>[^/]{1,256})\/query$/i
+  );
+
+  if (developerResourceD1QueryMatch) {
+    return {
+      key: `${method} /api/developer-resources/d1/:resourceId/query`,
+      params: { ...developerResourceD1QueryMatch.groups, type: "d1" },
+    };
+  }
+
+  const developerResourceR2ObjectMatch = pathname.match(
+    /^\/api\/developer-resources\/r2\/(?<resourceId>[^/]{1,256})\/objects$/i
+  );
+
+  if (developerResourceR2ObjectMatch) {
+    return {
+      key: `${method} /api/developer-resources/r2/:resourceId/objects`,
+      params: { ...developerResourceR2ObjectMatch.groups, type: "r2" },
+    };
+  }
+
+  const developerResourceKvValueMatch = pathname.match(
+    /^\/api\/developer-resources\/kv\/(?<resourceId>[^/]{1,256})\/values$/i
+  );
+
+  if (developerResourceKvValueMatch) {
+    return {
+      key: `${method} /api/developer-resources/kv/:resourceId/values`,
+      params: { ...developerResourceKvValueMatch.groups, type: "kv" },
+    };
+  }
+
+  const developerResourceTunnelConfigMatch = pathname.match(
+    /^\/api\/developer-resources\/tunnels\/(?<resourceId>[^/]{1,256})\/configuration$/i
+  );
+
+  if (developerResourceTunnelConfigMatch) {
+    return {
+      key: `${method} /api/developer-resources/tunnels/:resourceId/configuration`,
+      params: { ...developerResourceTunnelConfigMatch.groups, type: "tunnels" },
+    };
+  }
+
+  const developerResourceTunnelTokenMatch = pathname.match(
+    /^\/api\/developer-resources\/tunnels\/(?<resourceId>[^/]{1,256})\/token$/i
+  );
+
+  if (developerResourceTunnelTokenMatch) {
+    return {
+      key: `${method} /api/developer-resources/tunnels/:resourceId/token`,
+      params: { ...developerResourceTunnelTokenMatch.groups, type: "tunnels" },
+    };
+  }
+
+  const developerResourceDetailMatch = pathname.match(
+    /^\/api\/developer-resources\/(?<type>pages|d1|r2|kv|tunnels)\/(?<resourceId>[^/]{1,256})\/detail$/i
+  );
+
+  if (developerResourceDetailMatch) {
+    return {
+      key: `${method} /api/developer-resources/:type/:resourceId/detail`,
+      params: developerResourceDetailMatch.groups,
+    };
+  }
+
   const developerResourceItemMatch = pathname.match(
     /^\/api\/developer-resources\/(?<type>pages|d1|r2|kv|tunnels)\/(?<resourceId>[^/]{1,256})$/i
   );
@@ -29,6 +113,72 @@ function matchRoute(method, pathname) {
     return {
       key: `${method} /api/workers/:scriptName/routes/:routeId`,
       params: workersRouteMatch.groups,
+    };
+  }
+
+  const workersSecretMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/secrets\/(?<secretName>[A-Z0-9_]{1,64})$/i
+  );
+
+  if (workersSecretMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/secrets/:secretName`,
+      params: workersSecretMatch.groups,
+    };
+  }
+
+  const workersSecretsMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/secrets$/i
+  );
+
+  if (workersSecretsMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/secrets`,
+      params: workersSecretsMatch.groups,
+    };
+  }
+
+  const workersSchedulesMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/schedules$/i
+  );
+
+  if (workersSchedulesMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/schedules`,
+      params: workersSchedulesMatch.groups,
+    };
+  }
+
+  const workersDeploymentsMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/deployments$/i
+  );
+
+  if (workersDeploymentsMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/deployments`,
+      params: workersDeploymentsMatch.groups,
+    };
+  }
+
+  const workersTailMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/tail$/i
+  );
+
+  if (workersTailMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/tail`,
+      params: workersTailMatch.groups,
+    };
+  }
+
+  const workersSettingsMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/settings$/i
+  );
+
+  if (workersSettingsMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/settings`,
+      params: workersSettingsMatch.groups,
     };
   }
 
@@ -96,6 +246,28 @@ function matchRoute(method, pathname) {
     };
   }
 
+  const zoneOriginCertificateMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/origin-certificates\/(?<certificateId>[a-z0-9_-]{1,128})$/i
+  );
+
+  if (zoneOriginCertificateMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/origin-certificates/:certificateId`,
+      params: zoneOriginCertificateMatch.groups,
+    };
+  }
+
+  const zoneOriginCertificatesMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/origin-certificates$/i
+  );
+
+  if (zoneOriginCertificatesMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/origin-certificates`,
+      params: zoneOriginCertificatesMatch.groups,
+    };
+  }
+
   const zoneCertificatesMatch = pathname.match(
     /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/certificates$/i
   );
@@ -148,6 +320,17 @@ function matchRoute(method, pathname) {
     return {
       key: `${method} /api/zones/:zoneId/cache-settings`,
       params: zoneCacheSettingsMatch.groups,
+    };
+  }
+
+  const zoneSslSettingsMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/ssl-settings$/i
+  );
+
+  if (zoneSslSettingsMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/ssl-settings`,
+      params: zoneSslSettingsMatch.groups,
     };
   }
 
@@ -250,6 +433,39 @@ function matchRoute(method, pathname) {
     };
   }
 
+  const zoneSpeedManagedDomainMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/speed-deploy\/(?<accessDomain>[^/]{1,253})$/i
+  );
+
+  if (zoneSpeedManagedDomainMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/speed-deploy/:accessDomain`,
+      params: zoneSpeedManagedDomainMatch.groups,
+    };
+  }
+
+  const zoneFirewallRulesetRuleMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/firewall-rulesets\/(?<rulesetId>[a-z0-9_-]{1,128})\/rules\/(?<ruleId>[a-z0-9_-]{1,128})$/i
+  );
+
+  if (zoneFirewallRulesetRuleMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/firewall-rulesets/:rulesetId/rules/:ruleId`,
+      params: zoneFirewallRulesetRuleMatch.groups,
+    };
+  }
+
+  const zoneFirewallRulesetsRulesMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/firewall-rulesets\/rules$/i
+  );
+
+  if (zoneFirewallRulesetsRulesMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/firewall-rulesets/rules`,
+      params: zoneFirewallRulesetsRulesMatch.groups,
+    };
+  }
+
   const zoneDnsRecordMatch = pathname.match(
     /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/dns-records\/(?<recordId>[a-z0-9]{32})$/i
   );
@@ -297,6 +513,7 @@ export function createApiRouter({
   firewallRulesController,
   pageRulesController,
   speedDeployController,
+  sslSettingsController,
   workersController,
   zonesController,
 }) {
@@ -305,16 +522,60 @@ export function createApiRouter({
     ["POST /api/session/connect", credentialsController.connect],
     ["GET /api/developer-resources/:type", developerResourcesController.list],
     ["POST /api/developer-resources/:type", developerResourcesController.create],
+    ["GET /api/developer-resources/:type/:resourceId/detail", developerResourcesController.detail],
+    [
+      "PATCH /api/developer-resources/pages/:resourceId/build-config",
+      developerResourcesController.updatePagesBuildConfig,
+    ],
+    [
+      "POST /api/developer-resources/d1/:resourceId/query",
+      developerResourcesController.queryD1,
+    ],
+    [
+      "PUT /api/developer-resources/r2/:resourceId/objects",
+      developerResourcesController.putR2Object,
+    ],
+    [
+      "DELETE /api/developer-resources/r2/:resourceId/objects",
+      developerResourcesController.deleteR2Object,
+    ],
+    [
+      "GET /api/developer-resources/kv/:resourceId/values",
+      developerResourcesController.getKvValue,
+    ],
+    [
+      "PUT /api/developer-resources/kv/:resourceId/values",
+      developerResourcesController.putKvValue,
+    ],
+    [
+      "DELETE /api/developer-resources/kv/:resourceId/values",
+      developerResourcesController.deleteKvValue,
+    ],
+    [
+      "PUT /api/developer-resources/tunnels/:resourceId/configuration",
+      developerResourcesController.updateTunnelConfiguration,
+    ],
+    [
+      "GET /api/developer-resources/tunnels/:resourceId/token",
+      developerResourcesController.getTunnelToken,
+    ],
     [
       "DELETE /api/developer-resources/:type/:resourceId",
       developerResourcesController.delete,
     ],
     ["GET /api/workers", workersController.list],
     ["POST /api/workers", workersController.create],
+    ["GET /api/workers/queues", workersController.listQueues],
     ["GET /api/workers/:scriptName", workersController.get],
     ["PUT /api/workers/:scriptName", workersController.update],
     ["DELETE /api/workers/:scriptName", workersController.delete],
     ["POST /api/workers/:scriptName/subdomain", workersController.updateSubdomain],
+    ["PATCH /api/workers/:scriptName/settings", workersController.updateSettings],
+    ["PUT /api/workers/:scriptName/secrets", workersController.putSecret],
+    ["DELETE /api/workers/:scriptName/secrets/:secretName", workersController.deleteSecret],
+    ["PUT /api/workers/:scriptName/schedules", workersController.updateSchedules],
+    ["GET /api/workers/:scriptName/deployments", workersController.listDeployments],
+    ["POST /api/workers/:scriptName/tail", workersController.createTail],
     ["GET /api/workers/:scriptName/routes", workersController.listRoutes],
     ["POST /api/workers/:scriptName/routes", workersController.createRoute],
     ["DELETE /api/workers/:scriptName/routes/:routeId", workersController.deleteRoute],
@@ -341,8 +602,16 @@ export function createApiRouter({
     ],
     ["GET /api/zones/:zoneId/cache-settings", cacheSettingsController.get],
     ["PATCH /api/zones/:zoneId/cache-settings", cacheSettingsController.update],
+    ["GET /api/zones/:zoneId/ssl-settings", sslSettingsController.get],
+    ["PATCH /api/zones/:zoneId/ssl-settings", sslSettingsController.update],
     ["POST /api/zones/:zoneId/purge-cache", cacheSettingsController.purge],
     ["GET /api/zones/:zoneId/certificates", certificatesController.get],
+    ["POST /api/zones/:zoneId/certificates", certificatesController.upload],
+    ["POST /api/zones/:zoneId/origin-certificates", certificatesController.createOrigin],
+    [
+      "DELETE /api/zones/:zoneId/origin-certificates/:certificateId",
+      certificatesController.deleteOrigin,
+    ],
     [
       "DELETE /api/zones/:zoneId/certificates/:certificateId",
       certificatesController.delete,
@@ -351,9 +620,23 @@ export function createApiRouter({
     ["POST /api/zones/:zoneId/dns-records", dnsRecordsController.create],
     ["PATCH /api/zones/:zoneId/dns-records/:recordId", dnsRecordsController.update],
     ["DELETE /api/zones/:zoneId/dns-records/:recordId", dnsRecordsController.delete],
+    ["GET /api/zones/:zoneId/speed-deploy", speedDeployController.list],
     ["POST /api/zones/:zoneId/speed-deploy", speedDeployController.deploy],
+    ["DELETE /api/zones/:zoneId/speed-deploy/:accessDomain", speedDeployController.delete],
     ["GET /api/zones/:zoneId/firewall-rules", firewallRulesController.list],
     ["POST /api/zones/:zoneId/firewall-rules", firewallRulesController.create],
+    [
+      "POST /api/zones/:zoneId/firewall-rulesets/rules",
+      firewallRulesController.createRulesetRule,
+    ],
+    [
+      "PATCH /api/zones/:zoneId/firewall-rulesets/:rulesetId/rules/:ruleId",
+      firewallRulesController.updateRulesetRule,
+    ],
+    [
+      "DELETE /api/zones/:zoneId/firewall-rulesets/:rulesetId/rules/:ruleId",
+      firewallRulesController.deleteRulesetRule,
+    ],
     ["PATCH /api/zones/:zoneId/firewall-rules/:ruleId", firewallRulesController.update],
     [
       "DELETE /api/zones/:zoneId/firewall-rules/:ruleId",

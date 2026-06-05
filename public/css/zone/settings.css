@@ -171,3 +171,157 @@
 .settings-toggle.on span {
   transform: translateX(18px);
 }
+
+.settings-page {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.settings-top-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.settings-back-button {
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 8px;
+}
+
+.settings-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-warning-list,
+.firewall-warning-list,
+.analytics-warning-list,
+.devres-warning-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-warning-list p,
+.firewall-warning-list p,
+.analytics-warning-list p,
+.devres-warning-list p {
+  margin: 0;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 10px;
+}
+
+.ssl-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ssl-mode-card {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+
+.ssl-mode-card.active {
+  border-color: var(--blue);
+  background: #eff6ff;
+}
+
+.ssl-mode-card strong {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.ssl-mode-card span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.ssl-inline-head,
+.ssl-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ssl-inline-head select {
+  width: 160px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.ssl-toggle-list {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+
+.ssl-setting-row {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.ssl-setting-row:last-child {
+  border-bottom: 0;
+}
+
+.ssl-setting-row strong,
+.ssl-setting-row span {
+  display: block;
+}
+
+.ssl-setting-row strong {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.ssl-setting-row span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.ssl-native-toggle {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 860px) {
+  .ssl-mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

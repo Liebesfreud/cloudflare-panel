@@ -565,12 +565,44 @@
   background: #fbfcfe;
 }
 
+.workers-binding-form {
+  grid-template-columns: 140px 160px minmax(0, 1fr) auto;
+}
+
+.workers-cron-form {
+  display: grid;
+  gap: 8px;
+}
+
+.workers-cron-form textarea {
+  min-height: 84px;
+}
+
+.workers-tail-box {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 17px;
+  padding: 10px;
+}
+
+.workers-tail-box code {
+  overflow-wrap: anywhere;
+  color: #1e40af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 @media (max-width: 1180px) {
   .workers-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .workers-inline-form {
+  .workers-inline-form,
+  .workers-binding-form {
     grid-template-columns: 1fr;
   }
 }

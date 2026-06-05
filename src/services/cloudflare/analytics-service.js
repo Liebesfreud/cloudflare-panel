@@ -3,6 +3,7 @@ import { assertCloudflareId } from "./cloudflare-id.js";
 
 const defaultDays = 7;
 const maxTrendDays = 30;
+const maxRangeDays = 90;
 
 const zoneAnalyticsQuery = `
   query ZoneAnalytics($zoneTag: string, $dateStart: Date, $dateEnd: Date) {
@@ -50,6 +51,32 @@ const zoneAnalyticsQuery = `
   }
 `;
 
+const securityEventsQuery = `
+  query ZoneSecurityEvents($zoneTag: string, $datetimeStart: Time, $datetimeEnd: Time) {
+    viewer {
+      zones(filter: { zoneTag: $zoneTag }) {
+        firewallEventsAdaptiveGroups(
+          limit: 50
+          orderBy: [count_DESC]
+          filter: { datetime_geq: $datetimeStart, datetime_leq: $datetimeEnd }
+        ) {
+          count
+          dimensions {
+            action
+            clientAsn
+            clientCountryName
+            clientIP
+            description
+            ruleId
+            source
+            userAgent
+          }
+        }
+      }
+    }
+  }
+`;
+
 function toNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : 0;
@@ -78,6 +105,45 @@ function buildDateRange(days = defaultDays, now = new Date()) {
     days: normalizedDays,
     startDate: isoDate(start),
     endDate: isoDate(end),
+  };
+}
+
+function normalizeDateInput(value) {
+  const text = String(value || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return "";
+  }
+
+  const date = new Date(`${text}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? "" : isoDate(date);
+}
+
+function buildDateRangeFromOptions(options = {}, now = new Date()) {
+  const explicitStart = normalizeDateInput(options.startDate);
+  const explicitEnd = normalizeDateInput(options.endDate);
+
+  if (!explicitStart || !explicitEnd) {
+    return buildDateRange(Number(options.days), now);
+  }
+
+  const start = new Date(`${explicitStart}T00:00:00.000Z`);
+  const end = new Date(`${explicitEnd}T00:00:00.000Z`);
+
+  if (start > end) {
+    throw new HttpError(400, "统计开始日期不能晚于结束日期");
+  }
+
+  const days = Math.floor((end - start) / 86_400_000) + 1;
+
+  if (days > maxRangeDays) {
+    throw new HttpError(400, `统计日期范围不能超过 ${maxRangeDays} 天`);
+  }
+
+  return {
+    days,
+    startDate: explicitStart,
+    endDate: explicitEnd,
   };
 }
 
@@ -201,6 +267,22 @@ function normalizeAnalytics(groups, range) {
   };
 }
 
+function normalizeSecurityEventGroup(group = {}) {
+  const dimensions = group.dimensions || {};
+
+  return {
+    action: dimensions.action || "unknown",
+    asn: dimensions.clientAsn || "",
+    country: dimensions.clientCountryName || "",
+    ip: dimensions.clientIP || "",
+    description: dimensions.description || "",
+    ruleId: dimensions.ruleId || "",
+    source: dimensions.source || "",
+    userAgent: dimensions.userAgent || "",
+    count: toNumber(group.count),
+  };
+}
+
 function pickZone(data) {
   const zones = data?.viewer?.zones;
 
@@ -220,7 +302,8 @@ export class AnalyticsService {
   async getZoneAnalytics(zoneId, options = {}) {
     assertCloudflareId(zoneId, "区域 ID");
 
-    const range = buildDateRange(Number(options.days), this.now());
+    const range = buildDateRangeFromOptions(options, this.now());
+    const warnings = [];
     const data = await this.cloudflareClient.graphql(zoneAnalyticsQuery, {
       zoneTag: zoneId,
       dateStart: range.startDate,
@@ -236,6 +319,27 @@ export class AnalyticsService {
       ? zone.httpRequests1dGroups.map(normalizeGroup)
       : [];
 
-    return normalizeAnalytics(groups, range);
+    const analytics = normalizeAnalytics(groups, range);
+    const datetimeStart = `${range.startDate}T00:00:00Z`;
+    const datetimeEnd = `${range.endDate}T23:59:59Z`;
+
+    try {
+      const securityData = await this.cloudflareClient.graphql(securityEventsQuery, {
+        zoneTag: zoneId,
+        datetimeStart,
+        datetimeEnd,
+      });
+      const securityZone = pickZone(securityData);
+      const securityGroups = Array.isArray(securityZone?.firewallEventsAdaptiveGroups)
+        ? securityZone.firewallEventsAdaptiveGroups
+        : [];
+      analytics.securityEvents = securityGroups.map(normalizeSecurityEventGroup);
+    } catch (error) {
+      analytics.securityEvents = [];
+      warnings.push(`安全事件读取失败：${error.message}`);
+    }
+
+    analytics.warnings = warnings;
+    return analytics;
   }
 }

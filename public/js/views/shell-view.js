@@ -1,4 +1,4 @@
-import { navItems, zoneNavItems } from "../constants.js";
+import { githubIssueUrl, navItems, zoneNavItems } from "../constants.js";
 import { icon } from "../icons.js";
 import { state } from "../state.js";
 import { escapeHtml, topbarTitle } from "../utils.js";
@@ -8,7 +8,7 @@ function renderNav() {
     .map(([id, iconName, label]) => {
       if (id === "needs") {
         return `
-          <a class="nav-item" href="https://github.com/heichi233/network/issues/new" target="_blank" rel="noreferrer">
+          <a class="nav-item" href="${githubIssueUrl}" target="_blank" rel="noreferrer">
             <span class="nav-icon">${icon(iconName)}</span>
             <span>${escapeHtml(label)}</span>
           </a>

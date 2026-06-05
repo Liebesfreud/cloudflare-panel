@@ -8,6 +8,7 @@ import { DeveloperResourcesService } from "./services/cloudflare/developer-resou
 import { FirewallRulesService } from "./services/cloudflare/firewall-rules-service.js";
 import { PageRulesService } from "./services/cloudflare/page-rules-service.js";
 import { SpeedDeployService } from "./services/cloudflare/speed-deploy-service.js";
+import { SslSettingsService } from "./services/cloudflare/ssl-settings-service.js";
 import { WorkersService } from "./services/cloudflare/workers-service.js";
 import { ZonesService } from "./services/cloudflare/zones-service.js";
 import { AnalyticsController } from "./controllers/analytics-controller.js";
@@ -20,6 +21,7 @@ import { DnsRecordsController } from "./controllers/dns-records-controller.js";
 import { FirewallRulesController } from "./controllers/firewall-rules-controller.js";
 import { PageRulesController } from "./controllers/page-rules-controller.js";
 import { SpeedDeployController } from "./controllers/speed-deploy-controller.js";
+import { SslSettingsController } from "./controllers/ssl-settings-controller.js";
 import { WorkersController } from "./controllers/workers-controller.js";
 import { ZonesController } from "./controllers/zones-controller.js";
 import { createApp } from "./app.js";
@@ -60,6 +62,9 @@ export function createContainer(config) {
     cloudflareClient,
     dnsRecordsService,
   });
+  const sslSettingsService = new SslSettingsService({
+    cloudflareClient,
+  });
   const automationService = new AutomationService({
     cloudflareClient,
     dnsRecordsService,
@@ -80,6 +85,7 @@ export function createContainer(config) {
   const firewallRulesController = new FirewallRulesController({ firewallRulesService });
   const pageRulesController = new PageRulesController({ pageRulesService });
   const speedDeployController = new SpeedDeployController({ speedDeployService });
+  const sslSettingsController = new SslSettingsController({ sslSettingsService });
   const workersController = new WorkersController({ workersService });
 
   return {
@@ -94,6 +100,7 @@ export function createContainer(config) {
       firewallRulesController,
       pageRulesController,
       speedDeployController,
+      sslSettingsController,
       workersController,
       zonesController,
     }),
@@ -117,6 +124,8 @@ export function createContainer(config) {
     pageRulesService,
     speedDeployController,
     speedDeployService,
+    sslSettingsController,
+    sslSettingsService,
     workersController,
     workersService,
     zonesController,

@@ -54,6 +54,76 @@ function listFromPayload(payload, nestedKeys = []) {
   return null;
 }
 
+function assertKvKey(value) {
+  const key = String(value || "").trim();
+
+  if (!key || key.length > 512) {
+    throw new HttpError(400, "KV Key 不能为空，且长度不能超过 512");
+  }
+
+  return key;
+}
+
+function assertR2ObjectKey(value) {
+  const key = String(value || "").trim().replace(/^\/+/, "");
+
+  if (!key || key.length > 1024) {
+    throw new HttpError(400, "R2 对象 Key 不能为空，且长度不能超过 1024");
+  }
+
+  return key;
+}
+
+function normalizePagesDeployment(deployment = {}) {
+  return {
+    id: deployment.id || "",
+    projectName: deployment.project_name || "",
+    url: deployment.url || "",
+    environment: deployment.environment || "",
+    branch: deployment.deployment_trigger?.metadata?.branch || deployment.production_branch || "",
+    status: deployment.latest_stage?.status || deployment.stage || "",
+    createdOn: deployment.created_on || "",
+    modifiedOn: deployment.modified_on || "",
+  };
+}
+
+function normalizePagesDomain(domain = {}) {
+  return {
+    id: domain.id || domain.name || "",
+    name: domain.name || domain.hostname || "",
+    status: domain.status || "",
+    createdOn: domain.created_on || "",
+  };
+}
+
+function normalizeD1QueryResult(result = {}) {
+  return {
+    success: result.success !== false,
+    meta: result.meta || {},
+    results: Array.isArray(result.results) ? result.results : [],
+    duration: result.duration || result.meta?.duration || 0,
+  };
+}
+
+function normalizeR2Object(object = {}) {
+  return {
+    key: object.key || object.name || "",
+    size: object.size || 0,
+    etag: object.etag || object.httpEtag || "",
+    uploaded: object.uploaded || object.last_modified || "",
+    storageClass: object.storage_class || "",
+    checksums: object.checksums || {},
+  };
+}
+
+function normalizeKvKey(key = {}) {
+  return {
+    name: key.name || "",
+    expiration: key.expiration || null,
+    metadata: key.metadata || null,
+  };
+}
+
 function normalizePagesProject(project = {}) {
   const deployment = project.latest_deployment || project.canonical_deployment || {};
 
@@ -389,5 +459,356 @@ export class DeveloperResourcesService {
     );
 
     return { accountId: resolved.accountId, type: resourceType, id: normalizedId };
+  }
+
+  async getDetail(type, accountId = "", resourceId = "") {
+    const resourceType = assertResourceType(type);
+    const definition = definitions[resourceType];
+    const resolved = await this.resolveAccountId(accountId);
+    const id = definition.normalizeId(decodeURIComponent(String(resourceId || "")));
+    const warnings = [];
+    const detail = {
+      accountId: resolved.accountId,
+      accounts: resolved.accounts,
+      type: resourceType,
+      id,
+      item: null,
+      extras: {},
+      warnings,
+    };
+
+    if (resourceType === "pages") {
+      detail.item = await this.getPagesProject(resolved.accountId, id);
+      detail.extras.deployments = await this.listPagesDeployments(resolved.accountId, id).catch(
+        (error) => {
+          warnings.push(`部署记录读取失败：${error.message}`);
+          return [];
+        }
+      );
+      detail.extras.domains = await this.listPagesDomains(resolved.accountId, id).catch(
+        (error) => {
+          warnings.push(`自定义域读取失败：${error.message}`);
+          return [];
+        }
+      );
+      return detail;
+    }
+
+    if (resourceType === "d1") {
+      detail.item = await this.getD1Database(resolved.accountId, id);
+      detail.extras.tables = await this.listD1Tables(resolved.accountId, id).catch((error) => {
+        warnings.push(`表列表读取失败：${error.message}`);
+        return [];
+      });
+      return detail;
+    }
+
+    if (resourceType === "r2") {
+      detail.item = await this.getR2Bucket(resolved.accountId, id);
+      detail.extras.objects = await this.listR2Objects(resolved.accountId, id).catch((error) => {
+        warnings.push(`对象列表读取失败：${error.message}`);
+        return [];
+      });
+      return detail;
+    }
+
+    if (resourceType === "kv") {
+      detail.item = await this.getKvNamespace(resolved.accountId, id);
+      detail.extras.keys = await this.listKvKeys(resolved.accountId, id).catch((error) => {
+        warnings.push(`Key 列表读取失败：${error.message}`);
+        return [];
+      });
+      return detail;
+    }
+
+    detail.item = await this.getTunnel(resolved.accountId, id);
+    detail.extras.configuration = await this.getTunnelConfiguration(resolved.accountId, id).catch(
+      (error) => {
+        warnings.push(`Tunnel ingress 配置读取失败：${error.message}`);
+        return null;
+      }
+    );
+    return detail;
+  }
+
+  async getPagesProject(accountId, projectName) {
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}`
+    );
+
+    return normalizePagesProject(payload.result || {});
+  }
+
+  async listPagesDeployments(accountId, projectName) {
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments`,
+      { page: 1, per_page: 10 }
+    );
+    const deployments = listFromPayload(payload, ["deployments"]) || [];
+
+    return deployments.map(normalizePagesDeployment);
+  }
+
+  async listPagesDomains(accountId, projectName) {
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/domains`
+    );
+    const domains = listFromPayload(payload, ["domains"]) || [];
+
+    return domains.map(normalizePagesDomain);
+  }
+
+  async updatePagesBuildConfig(accountId = "", projectName = "", input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    const normalizedProjectName = definitions.pages.normalizeId(projectName);
+    const body = {};
+
+    if (input.productionBranch !== undefined) {
+      body.production_branch = String(input.productionBranch || "").trim() || "main";
+    }
+
+    if (input.buildCommand !== undefined || input.destinationDir !== undefined || input.rootDir !== undefined) {
+      body.build_config = {
+        ...(input.buildCommand !== undefined
+          ? { build_command: String(input.buildCommand || "").trim() }
+          : {}),
+        ...(input.destinationDir !== undefined
+          ? { destination_dir: String(input.destinationDir || "").trim() }
+          : {}),
+        ...(input.rootDir !== undefined ? { root_dir: String(input.rootDir || "").trim() } : {}),
+      };
+    }
+
+    if (Object.keys(body).length === 0) {
+      throw new HttpError(400, "没有可保存的 Pages 构建配置");
+    }
+
+    const payload = await this.cloudflareClient.patch(
+      `accounts/${resolved.accountId}/pages/projects/${encodeURIComponent(normalizedProjectName)}`,
+      body
+    );
+
+    return {
+      accountId: resolved.accountId,
+      item: normalizePagesProject(payload.result || {}),
+    };
+  }
+
+  async getD1Database(accountId, databaseId) {
+    assertCloudflareResourceId(databaseId, "D1 数据库 ID");
+    const payload = await this.cloudflareClient.get(`accounts/${accountId}/d1/database/${databaseId}`);
+
+    return normalizeD1Database(payload.result || {});
+  }
+
+  async queryD1(accountId = "", databaseId = "", input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(databaseId, "D1 数据库 ID");
+    const sql = String(input.sql || "").trim();
+
+    if (!sql || sql.length > 10000) {
+      throw new HttpError(400, "SQL 不能为空，且长度不能超过 10000");
+    }
+
+    const payload = await this.cloudflareClient.post(
+      `accounts/${resolved.accountId}/d1/database/${databaseId}/query`,
+      {
+        sql,
+        params: Array.isArray(input.params) ? input.params : [],
+      }
+    );
+    const results = Array.isArray(payload.result) ? payload.result : [payload.result || {}];
+
+    return {
+      accountId: resolved.accountId,
+      databaseId,
+      results: results.map(normalizeD1QueryResult),
+    };
+  }
+
+  async listD1Tables(accountId, databaseId) {
+    const payload = await this.queryD1(accountId, databaseId, {
+      sql: "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    });
+
+    return payload.results.flatMap((result) =>
+      result.results.map((row) => String(row.name || "")).filter(Boolean)
+    );
+  }
+
+  async getR2Bucket(accountId, bucketName) {
+    const normalizedBucketName = definitions.r2.normalizeId(bucketName);
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/r2/buckets/${normalizedBucketName}`
+    );
+
+    return normalizeR2Bucket(payload.result || { name: normalizedBucketName });
+  }
+
+  async listR2Objects(accountId, bucketName, options = {}) {
+    const normalizedBucketName = definitions.r2.normalizeId(bucketName);
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/r2/buckets/${normalizedBucketName}/objects`,
+      {
+        prefix: options.prefix,
+        delimiter: options.delimiter,
+        cursor: options.cursor,
+        per_page: options.perPage || 50,
+      }
+    );
+    const objects = listFromPayload(payload, ["objects"]) || [];
+
+    return objects.map(normalizeR2Object);
+  }
+
+  async putR2Object(accountId = "", bucketName = "", input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    const normalizedBucketName = definitions.r2.normalizeId(bucketName);
+    const key = assertR2ObjectKey(input.key);
+    const content = String(input.content ?? "");
+    const response = await this.cloudflareClient.putRaw(
+      `accounts/${resolved.accountId}/r2/buckets/${normalizedBucketName}/objects/${encodeURIComponent(key)}`,
+      content,
+      {
+        "Content-Type": String(input.contentType || "application/octet-stream"),
+      }
+    );
+
+    return {
+      accountId: resolved.accountId,
+      bucketName: normalizedBucketName,
+      key,
+      etag: response.headers.get("etag") || "",
+    };
+  }
+
+  async deleteR2Object(accountId = "", bucketName = "", key = "") {
+    const resolved = await this.resolveAccountId(accountId);
+    const normalizedBucketName = definitions.r2.normalizeId(bucketName);
+    const normalizedKey = assertR2ObjectKey(key);
+
+    await this.cloudflareClient.deleteAny(
+      `accounts/${resolved.accountId}/r2/buckets/${normalizedBucketName}/objects/${encodeURIComponent(normalizedKey)}`
+    );
+
+    return { accountId: resolved.accountId, bucketName: normalizedBucketName, key: normalizedKey };
+  }
+
+  async getKvNamespace(accountId, namespaceId) {
+    assertCloudflareResourceId(namespaceId, "KV 命名空间 ID");
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/storage/kv/namespaces/${namespaceId}`
+    );
+
+    return normalizeKvNamespace(payload.result || { id: namespaceId });
+  }
+
+  async listKvKeys(accountId, namespaceId, options = {}) {
+    assertCloudflareResourceId(namespaceId, "KV 命名空间 ID");
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/storage/kv/namespaces/${namespaceId}/keys`,
+      {
+        prefix: options.prefix,
+        cursor: options.cursor,
+        limit: options.limit || 50,
+      }
+    );
+    const keys = listFromPayload(payload, ["keys"]) || [];
+
+    return keys.map(normalizeKvKey);
+  }
+
+  async getKvValue(accountId = "", namespaceId = "", key = "") {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(namespaceId, "KV 命名空间 ID");
+    const normalizedKey = assertKvKey(key);
+    const response = await this.cloudflareClient.getRaw(
+      `accounts/${resolved.accountId}/storage/kv/namespaces/${namespaceId}/values/${encodeURIComponent(normalizedKey)}`,
+      {},
+      { Accept: "text/plain,*/*" }
+    );
+
+    return {
+      accountId: resolved.accountId,
+      namespaceId,
+      key: normalizedKey,
+      value: await response.text(),
+      contentType: response.headers.get("content-type") || "",
+    };
+  }
+
+  async putKvValue(accountId = "", namespaceId = "", input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(namespaceId, "KV 命名空间 ID");
+    const key = assertKvKey(input.key);
+    const value = String(input.value ?? "");
+    await this.cloudflareClient.putRaw(
+      `accounts/${resolved.accountId}/storage/kv/namespaces/${namespaceId}/values/${encodeURIComponent(key)}`,
+      value,
+      { "Content-Type": "text/plain; charset=utf-8" }
+    );
+
+    return { accountId: resolved.accountId, namespaceId, key };
+  }
+
+  async deleteKvValue(accountId = "", namespaceId = "", key = "") {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(namespaceId, "KV 命名空间 ID");
+    const normalizedKey = assertKvKey(key);
+    await this.cloudflareClient.deleteAny(
+      `accounts/${resolved.accountId}/storage/kv/namespaces/${namespaceId}/values/${encodeURIComponent(normalizedKey)}`
+    );
+
+    return { accountId: resolved.accountId, namespaceId, key: normalizedKey };
+  }
+
+  async getTunnel(accountId, tunnelId) {
+    assertCloudflareResourceId(tunnelId, "Tunnel ID");
+    const payload = await this.cloudflareClient.get(`accounts/${accountId}/cfd_tunnel/${tunnelId}`);
+
+    return normalizeTunnel(payload.result || { id: tunnelId });
+  }
+
+  async getTunnelConfiguration(accountId, tunnelId) {
+    assertCloudflareResourceId(tunnelId, "Tunnel ID");
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/cfd_tunnel/${tunnelId}/configurations`
+    );
+
+    return payload.result || null;
+  }
+
+  async updateTunnelConfiguration(accountId = "", tunnelId = "", input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(tunnelId, "Tunnel ID");
+    const config = input.config || {
+      ingress: Array.isArray(input.ingress) ? input.ingress : [],
+      warp_routing: input.warpRouting || input.warp_routing || { enabled: false },
+    };
+
+    if (!Array.isArray(config.ingress)) {
+      throw new HttpError(400, "Tunnel ingress 配置必须是数组");
+    }
+
+    const payload = await this.cloudflareClient.put(
+      `accounts/${resolved.accountId}/cfd_tunnel/${tunnelId}/configurations`,
+      { config }
+    );
+
+    return {
+      accountId: resolved.accountId,
+      tunnelId,
+      configuration: payload.result || null,
+    };
+  }
+
+  async getTunnelToken(accountId = "", tunnelId = "") {
+    const resolved = await this.resolveAccountId(accountId);
+    assertCloudflareResourceId(tunnelId, "Tunnel ID");
+    const token = await this.cloudflareClient.getText(
+      `accounts/${resolved.accountId}/cfd_tunnel/${tunnelId}/token`
+    );
+
+    return { accountId: resolved.accountId, tunnelId, token };
   }
 }

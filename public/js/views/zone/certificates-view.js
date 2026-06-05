@@ -62,6 +62,42 @@ function renderCertificateList() {
   `;
 }
 
+function renderOriginCertificateList() {
+  const certificates = Array.isArray(state.originCertificates) ? state.originCertificates : [];
+
+  if (certificates.length === 0) {
+    return `<div class="certificate-empty">暂无 Origin CA 证书</div>`;
+  }
+
+  return `
+    <div class="certificate-list">
+      ${certificates
+        .map(
+          (certificate) => `
+            <article class="certificate-item">
+              <div>
+                <strong>${escapeHtml(certificate.hostnames?.join(", ") || certificate.id || "Origin CA")}</strong>
+                <span>到期时间: ${escapeHtml(formatDate(certificate.expiresOn))}</span>
+                <span>类型: ${escapeHtml(certificate.requestType || "origin-rsa")}</span>
+              </div>
+              <button
+                class="secondary-button certificate-delete-button delete-origin-certificate"
+                type="button"
+                data-certificate-id="${escapeHtml(certificate.id)}"
+                aria-label="删除 Origin CA 证书"
+                title="删除 Origin CA 证书"
+                ${state.deletingCertificateId === certificate.id ? "disabled" : ""}
+              >
+                ${icon("trash")}
+              </button>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderWarnings() {
   if (!state.certificateWarnings.length) {
     return "";
@@ -96,31 +132,44 @@ export function renderCertificatesSettingsView() {
         </div>
 
         <div class="certificates-body">
-          <section class="certificate-upload-box">
+          <form class="certificate-upload-box" id="certificate-upload-form">
             <h3>上传自定义 SSL 证书</h3>
             <p>上传您自己的 SSL/TLS 证书和私钥</p>
 
             <label>
               <span>证书（Certificate）</span>
-              <textarea disabled placeholder="Paste certificate content here"></textarea>
+              <textarea name="certificate" placeholder="-----BEGIN CERTIFICATE-----" ${state.savingCertificate ? "disabled" : ""}></textarea>
             </label>
             <label>
               <span>私钥（Private Key）</span>
-              <textarea disabled placeholder="Paste private key content here"></textarea>
+              <textarea name="privateKey" placeholder="-----BEGIN PRIVATE KEY-----" ${state.savingCertificate ? "disabled" : ""}></textarea>
             </label>
             <label>
               <span>证书链（可选）</span>
-              <textarea class="short" disabled placeholder="中间证书和根证书（可选）"></textarea>
+              <textarea class="short" name="certificateChain" placeholder="中间证书和根证书（可选）" ${state.savingCertificate ? "disabled" : ""}></textarea>
             </label>
+            <div class="certificate-form-row">
+              <label>
+                <span>Bundle Method</span>
+                <select name="bundleMethod" ${state.savingCertificate ? "disabled" : ""}>
+                  <option value="ubiquitous">ubiquitous</option>
+                  <option value="optimal">optimal</option>
+                  <option value="force">force</option>
+                </select>
+              </label>
+              <label>
+                <span>优先级（可选）</span>
+                <input name="priority" type="number" min="0" placeholder="0" ${state.savingCertificate ? "disabled" : ""} />
+              </label>
+            </div>
 
-            <button class="secondary-button certificate-upload-button" type="button" disabled>
-              上传证书
+            <button class="secondary-button certificate-upload-button" type="submit" ${state.savingCertificate ? "disabled" : ""}>
+              ${state.savingCertificate ? "处理中..." : "上传证书"}
             </button>
             <div class="certificate-plan-warning">
-              自定义证书功能需要 Cloudflare 企业版或更高版本账户。<br />
-              免费版和 Pro 版账户自动使用 Cloudflare Universal SSL。
+              私钥只会提交到本地后端再转发给 Cloudflare，不会写入前端状态或页面列表。
             </div>
-          </section>
+          </form>
 
           <section class="certificate-status-box">
             <div class="certificate-status-heading">
@@ -156,24 +205,46 @@ export function renderCertificatesSettingsView() {
             ${renderCertificateList()}
           </section>
 
-          <section class="certificate-reminder-box">
-            <h3>证书到期提醒</h3>
-            <p>自动监控证书有效期并在到期前提醒</p>
-            <div class="certificate-reminder-row">
-              <div>
-                <strong>提醒时间</strong>
-                <span>证书到期前 30 天</span>
-              </div>
-              <button class="secondary-button" type="button">配置</button>
+          <form class="certificate-reminder-box" id="origin-certificate-form">
+            <h3>Origin CA 证书创建</h3>
+            <p>创建安装在源站服务器上的 Cloudflare Origin CA 证书。</p>
+            <label>
+              <span>证书域名</span>
+              <input name="hostnames" value="${escapeHtml(zone.name || "")}" placeholder="${escapeHtml(zone.name || "example.com")}, *.${escapeHtml(zone.name || "example.com")}" ${state.savingCertificate ? "disabled" : ""} />
+            </label>
+            <div class="certificate-form-row">
+              <label>
+                <span>证书类型</span>
+                <select name="requestType" ${state.savingCertificate ? "disabled" : ""}>
+                  <option value="origin-rsa">RSA</option>
+                  <option value="origin-ecc">ECC</option>
+                </select>
+              </label>
+              <label>
+                <span>有效期（天）</span>
+                <input name="requestedValidity" type="number" min="7" max="5475" value="5475" ${state.savingCertificate ? "disabled" : ""} />
+              </label>
             </div>
-            <div class="certificate-reminder-row">
-              <div>
-                <strong>通知方式</strong>
-                <span>邮件通知</span>
-              </div>
-              <button class="secondary-button" type="button">修改</button>
+            <label>
+              <span>CSR（可选）</span>
+              <textarea class="short" name="csr" placeholder="留空则由 Cloudflare 生成证书请求" ${state.savingCertificate ? "disabled" : ""}></textarea>
+            </label>
+            <button class="secondary-button certificate-upload-button" type="submit" ${state.savingCertificate ? "disabled" : ""}>
+              ${state.savingCertificate ? "处理中..." : "创建 Origin CA"}
+            </button>
+            ${
+              state.originCertificateCreated?.certificate
+                ? `<label>
+                    <span>最近创建的证书</span>
+                    <textarea readonly>${escapeHtml(state.originCertificateCreated.certificate)}</textarea>
+                  </label>`
+                : ""
+            }
+            <div>
+              <h3>Origin CA 证书列表</h3>
+              ${renderOriginCertificateList()}
             </div>
-          </section>
+          </form>
         </div>
       </section>
     </div>

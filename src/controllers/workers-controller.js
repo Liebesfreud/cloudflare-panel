@@ -60,6 +60,67 @@ export class WorkersController {
     return { statusCode: 200, body: result };
   };
 
+  updateSettings = async ({ request, params, url }) => {
+    const body = await readJsonBody(request);
+    const result = await this.workersService.updateSettings(
+      body.accountId || url.searchParams.get("accountId"),
+      params.scriptName,
+      body
+    );
+    return { statusCode: 200, body: result };
+  };
+
+  putSecret = async ({ request, params, url }) => {
+    const body = await readJsonBody(request);
+    const secret = await this.workersService.putSecret(
+      body.accountId || url.searchParams.get("accountId"),
+      params.scriptName,
+      body
+    );
+    return { statusCode: 200, body: { secret } };
+  };
+
+  deleteSecret = async ({ params, url }) => {
+    const result = await this.workersService.deleteSecret(
+      url.searchParams.get("accountId"),
+      params.scriptName,
+      params.secretName
+    );
+    return { statusCode: 200, body: result };
+  };
+
+  updateSchedules = async ({ request, params, url }) => {
+    const body = await readJsonBody(request);
+    const result = await this.workersService.updateSchedules(
+      body.accountId || url.searchParams.get("accountId"),
+      params.scriptName,
+      body
+    );
+    return { statusCode: 200, body: result };
+  };
+
+  listDeployments = async ({ params, url }) => {
+    const resolved = await this.workersService.resolveAccountId(url.searchParams.get("accountId"));
+    const deployments = await this.workersService.listDeployments(
+      resolved.accountId,
+      params.scriptName
+    );
+    return { statusCode: 200, body: { accountId: resolved.accountId, deployments } };
+  };
+
+  createTail = async ({ params, url }) => {
+    const result = await this.workersService.createTail(
+      url.searchParams.get("accountId"),
+      params.scriptName
+    );
+    return { statusCode: 201, body: result };
+  };
+
+  listQueues = async ({ url }) => {
+    const queues = await this.workersService.listQueues(url.searchParams.get("accountId"));
+    return { statusCode: 200, body: { queues } };
+  };
+
   listRoutes = async ({ params, url }) => {
     const zoneId = url.searchParams.get("zoneId");
 

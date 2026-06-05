@@ -1,3 +1,5 @@
+export const githubIssueUrl = "https://github.com/baize-projects/network/issues/new";
+
 export const navItems = [
   ["domain", "globe", "域名管理"],
   ["speed", "zap", "一键加速"],

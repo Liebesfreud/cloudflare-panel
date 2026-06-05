@@ -19,17 +19,26 @@ export const state = {
   selectedZone: null,
   analytics: null,
   analyticsRange: "7d",
+  analyticsStartDate: "",
+  analyticsEndDate: "",
   pageRules: [],
+  sslSettings: null,
+  sslWarnings: [],
   customCertificates: [],
+  originCertificates: [],
+  originCertificateCreated: null,
   universalSsl: null,
   certificateWarnings: [],
   dnsRecords: [],
   cacheSettings: null,
   cacheWarnings: [],
   firewallRules: [],
+  firewallRulesets: null,
+  firewallWarnings: [],
   loadingZones: true,
   loadingAnalytics: false,
   loadingPageRules: false,
+  loadingSslSettings: false,
   loadingCertificates: false,
   loadingDns: false,
   loadingCacheSettings: false,
@@ -37,6 +46,7 @@ export const state = {
   zoneError: "",
   analyticsError: "",
   pageRulesError: "",
+  sslError: "",
   certificateError: "",
   dnsError: "",
   cacheError: "",
@@ -45,8 +55,11 @@ export const state = {
   dnsFormOpen: false,
   savingDns: false,
   savingCacheSettings: false,
+  savingSslSettings: false,
+  savingCertificate: false,
   purgingCache: false,
   savingFirewallRule: false,
+  savingRulesetRule: false,
   savingPageRule: false,
   deletingFirewallRuleId: "",
   deletingPageRuleId: "",
@@ -64,6 +77,7 @@ export const state = {
   speedDeploying: false,
   speedDomainsOpen: false,
   speedDomainDeleteId: "",
+  speedDomainsLoading: false,
   speedNotice: "",
   speedForm: { ...defaultSpeedForm },
   speedAcceleratedDomains: [],
@@ -94,12 +108,26 @@ export const state = {
   workersRoutes: [],
   workersRoutesLoading: false,
   workersDomainZoneId: "",
+  workersBindingFormOpen: false,
+  workersCronDraft: "",
+  workersSecretDraftName: "",
+  workersTailInfo: null,
   workersDeleteName: "",
   workersDeleteConfirm: "",
   developerResourceType: "",
   developerResourceAccountId: "",
   developerResourceAccounts: [],
   developerResourceItems: [],
+  developerResourceActiveId: "",
+  developerResourceDetail: null,
+  developerResourceDetailLoading: false,
+  developerResourceDetailNotice: "",
+  developerResourceSqlDraft: "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
+  developerResourceKvKey: "",
+  developerResourceKvValue: "",
+  developerResourceR2Key: "",
+  developerResourceR2Content: "",
+  developerResourceTunnelToken: null,
   developerResourceLoading: false,
   developerResourceLoadedType: "",
   developerResourceNotice: "",
@@ -123,14 +151,22 @@ export function resetSessionState() {
   state.zones = [];
   state.analytics = null;
   state.analyticsRange = "7d";
+  state.analyticsStartDate = "";
+  state.analyticsEndDate = "";
   state.pageRules = [];
+  state.sslSettings = null;
+  state.sslWarnings = [];
   state.customCertificates = [];
+  state.originCertificates = [];
+  state.originCertificateCreated = null;
   state.universalSsl = null;
   state.certificateWarnings = [];
   state.dnsRecords = [];
   state.cacheSettings = null;
   state.cacheWarnings = [];
   state.firewallRules = [];
+  state.firewallRulesets = null;
+  state.firewallWarnings = [];
   resetDnsForm();
   resetFirewallForm();
   resetPageRuleForm();
@@ -202,6 +238,10 @@ export function resetWorkersState() {
   state.workersRoutes = [];
   state.workersRoutesLoading = false;
   state.workersDomainZoneId = "";
+  state.workersBindingFormOpen = false;
+  state.workersCronDraft = "";
+  state.workersSecretDraftName = "";
+  state.workersTailInfo = null;
   state.workersDeleteName = "";
   state.workersDeleteConfirm = "";
 }
@@ -211,6 +251,16 @@ export function resetDeveloperResourcesState() {
   state.developerResourceAccountId = "";
   state.developerResourceAccounts = [];
   state.developerResourceItems = [];
+  state.developerResourceActiveId = "";
+  state.developerResourceDetail = null;
+  state.developerResourceDetailLoading = false;
+  state.developerResourceDetailNotice = "";
+  state.developerResourceSqlDraft = "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;";
+  state.developerResourceKvKey = "";
+  state.developerResourceKvValue = "";
+  state.developerResourceR2Key = "";
+  state.developerResourceR2Content = "";
+  state.developerResourceTunnelToken = null;
   state.developerResourceLoading = false;
   state.developerResourceLoadedType = "";
   state.developerResourceNotice = "";

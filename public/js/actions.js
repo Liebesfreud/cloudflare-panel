@@ -37,6 +37,11 @@ export function createActions({ renderApp }) {
       return;
     }
 
+    if (state.zoneSection === "ssl") {
+      await zoneSettingsActions.loadSslSettings();
+      return;
+    }
+
     if (state.zoneSection === "firewall") {
       await zoneSettingsActions.loadFirewallRules();
       return;

@@ -2,6 +2,7 @@ import { HttpError } from "../../lib/http-error.js";
 import { assertCloudflareId, assertCloudflareResourceId } from "./cloudflare-id.js";
 
 const workerNamePattern = /^[a-z0-9-]+$/;
+const bindingNamePattern = /^[A-Z][A-Z0-9_]{0,63}$/;
 const maxWorkerScriptBytes = 1024 * 1024;
 
 export const defaultWorkerScript = `addEventListener('fetch', event => {
@@ -99,6 +100,195 @@ function normalizeSettings(settings = {}) {
     compatibilityFlags: Array.isArray(settings.compatibility_flags)
       ? settings.compatibility_flags
       : [],
+  };
+}
+
+function normalizeSecret(secret = {}) {
+  return {
+    name: secret.name || "",
+    type: secret.type || "secret_text",
+  };
+}
+
+function normalizeCronSchedule(schedule = {}) {
+  return {
+    cron: schedule.cron || "",
+    createdOn: schedule.created_on || "",
+    modifiedOn: schedule.modified_on || "",
+  };
+}
+
+function normalizeDeployment(deployment = {}) {
+  return {
+    id: deployment.id || "",
+    source: deployment.source || "",
+    strategy: deployment.strategy || "",
+    createdOn: deployment.created_on || "",
+    annotations: deployment.annotations || {},
+    authorEmail: deployment.author_email || "",
+    versionId: deployment.versions?.[0]?.version_id || deployment.version_id || "",
+  };
+}
+
+function normalizeQueue(queue = {}) {
+  return {
+    id: queue.queue_id || queue.id || "",
+    name: queue.queue_name || queue.name || "",
+    createdOn: queue.created_on || "",
+    modifiedOn: queue.modified_on || "",
+  };
+}
+
+function assertBindingName(value) {
+  const name = String(value || "").trim().toUpperCase();
+
+  if (!bindingNamePattern.test(name)) {
+    throw new HttpError(400, "绑定名称只能包含大写字母、数字和下划线，且必须以字母开头");
+  }
+
+  return name;
+}
+
+function normalizeBinding(input = {}) {
+  const type = String(input.type || "").trim();
+  const name = assertBindingName(input.name);
+  const binding = { type, name };
+
+  if (type === "plain_text") {
+    const text = String(input.text ?? input.value ?? "");
+
+    if (text.length > 4096) {
+      throw new HttpError(400, "环境变量值不能超过 4096 个字符");
+    }
+
+    binding.text = text;
+    return binding;
+  }
+
+  if (type === "secret_text") {
+    const text = String(input.text ?? input.value ?? "");
+
+    if (!text) {
+      throw new HttpError(400, "Secret 值不能为空");
+    }
+
+    binding.text = text;
+    return binding;
+  }
+
+  if (type === "kv_namespace") {
+    assertCloudflareResourceId(input.namespaceId || input.namespace_id, "KV 命名空间 ID");
+    binding.namespace_id = input.namespaceId || input.namespace_id;
+    return binding;
+  }
+
+  if (type === "d1") {
+    assertCloudflareResourceId(input.databaseId || input.id, "D1 数据库 ID");
+    binding.id = input.databaseId || input.id;
+    return binding;
+  }
+
+  if (type === "r2_bucket") {
+    const bucketName = String(input.bucketName || input.bucket_name || "").trim();
+
+    if (!bucketName) {
+      throw new HttpError(400, "R2 存储桶名称不能为空");
+    }
+
+    binding.bucket_name = bucketName;
+    return binding;
+  }
+
+  if (type === "queue") {
+    const queueName = String(input.queueName || input.queue_name || "").trim();
+
+    if (!queueName) {
+      throw new HttpError(400, "Queue 名称不能为空");
+    }
+
+    binding.queue_name = queueName;
+    return binding;
+  }
+
+  if (type === "service") {
+    const service = String(input.service || "").trim();
+
+    if (!service) {
+      throw new HttpError(400, "Service Binding 目标 Worker 不能为空");
+    }
+
+    binding.service = service;
+    binding.environment = String(input.environment || "production").trim() || "production";
+    return binding;
+  }
+
+  throw new HttpError(400, "绑定类型无效");
+}
+
+function normalizeSettingsInput(input = {}, currentSettings = {}) {
+  const body = {};
+
+  if (input.compatibilityDate !== undefined) {
+    const compatibilityDate = String(input.compatibilityDate || "").trim();
+
+    if (compatibilityDate && !/^\d{4}-\d{2}-\d{2}$/.test(compatibilityDate)) {
+      throw new HttpError(400, "兼容日期格式应为 YYYY-MM-DD");
+    }
+
+    body.compatibility_date = compatibilityDate;
+  }
+
+  if (input.compatibilityFlags !== undefined) {
+    const flags = Array.isArray(input.compatibilityFlags)
+      ? input.compatibilityFlags
+      : String(input.compatibilityFlags || "").split(/[\s,，]+/);
+    body.compatibility_flags = flags
+      .map((flag) => String(flag || "").trim())
+      .filter(Boolean);
+  }
+
+  if (input.usageModel !== undefined) {
+    const usageModel = String(input.usageModel || "").trim();
+
+    if (usageModel) {
+      body.usage_model = usageModel;
+    }
+  }
+
+  if (input.bindings !== undefined) {
+    if (!Array.isArray(input.bindings)) {
+      throw new HttpError(400, "绑定配置必须是数组");
+    }
+
+    body.bindings = input.bindings.map(normalizeBinding);
+  } else if (Array.isArray(currentSettings.bindings)) {
+    body.bindings = currentSettings.bindings;
+  }
+
+  if (Object.keys(body).length === 0) {
+    throw new HttpError(400, "没有可保存的 Worker 设置");
+  }
+
+  return body;
+}
+
+function normalizeCronInput(input = {}) {
+  const schedules = (Array.isArray(input.schedules) ? input.schedules : [input])
+    .map((item) => String(item.cron || item || "").trim())
+    .filter(Boolean);
+
+  if (schedules.length > 10) {
+    throw new HttpError(400, "Cron Triggers 最多配置 10 条");
+  }
+
+  return {
+    schedules: schedules.map((cron) => {
+      if (cron.length > 100) {
+        throw new HttpError(400, "Cron 表达式过长");
+      }
+
+      return { cron };
+    }),
   };
 }
 
@@ -270,7 +460,7 @@ export class WorkersService {
     const workerName = assertWorkerName(scriptName);
     const warnings = [];
     const resolved = await this.resolveAccountId(accountId);
-    const [script, subdomain, settings, domains] = await Promise.all([
+    const [script, subdomain, settings, domains, schedules, deployments, secrets, queues] = await Promise.all([
       this.cloudflareClient.getText(
         `accounts/${resolved.accountId}/workers/scripts/${workerName}`
       ),
@@ -286,6 +476,22 @@ export class WorkersService {
         warnings.push(error.message);
         return [];
       }),
+      this.listSchedules(resolved.accountId, workerName).catch((error) => {
+        warnings.push(error.message);
+        return [];
+      }),
+      this.listDeployments(resolved.accountId, workerName).catch((error) => {
+        warnings.push(error.message);
+        return [];
+      }),
+      this.listSecrets(resolved.accountId, workerName).catch((error) => {
+        warnings.push(error.message);
+        return [];
+      }),
+      this.listQueues(resolved.accountId).catch((error) => {
+        warnings.push(error.message);
+        return [];
+      }),
     ]);
 
     return {
@@ -296,6 +502,10 @@ export class WorkersService {
       subdomain,
       settings,
       domains,
+      schedules,
+      deployments,
+      secrets,
+      queues,
       warnings,
     };
   }
@@ -335,6 +545,141 @@ export class WorkersService {
     );
 
     return normalizeSettings(payload.result || {});
+  }
+
+  async updateSettings(accountId, scriptName, input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    const workerName = assertWorkerName(scriptName);
+    const currentSettings = await this.getSettings(resolved.accountId, workerName).catch(() => ({}));
+    const payload = await this.cloudflareClient.patch(
+      `accounts/${resolved.accountId}/workers/scripts/${workerName}/settings`,
+      normalizeSettingsInput(input, currentSettings)
+    );
+
+    return {
+      accountId: resolved.accountId,
+      settings: normalizeSettings(payload.result || {}),
+    };
+  }
+
+  async listSecrets(accountId, scriptName) {
+    assertCloudflareId(accountId, "账号 ID");
+    const workerName = assertWorkerName(scriptName);
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/workers/scripts/${workerName}/secrets`
+    );
+
+    if (!Array.isArray(payload.result)) {
+      throw new HttpError(502, "Cloudflare Worker Secrets 返回格式异常，请稍后重试。");
+    }
+
+    return payload.result.map(normalizeSecret);
+  }
+
+  async putSecret(accountId, scriptName, input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    const workerName = assertWorkerName(scriptName);
+    const name = assertBindingName(input.name);
+    const text = String(input.text || input.value || "");
+
+    if (!text) {
+      throw new HttpError(400, "Secret 值不能为空");
+    }
+
+    const payload = await this.cloudflareClient.put(
+      `accounts/${resolved.accountId}/workers/scripts/${workerName}/secrets`,
+      { name, text, type: "secret_text" }
+    );
+
+    return normalizeSecret(payload.result || { name });
+  }
+
+  async deleteSecret(accountId, scriptName, secretName) {
+    const resolved = await this.resolveAccountId(accountId);
+    const workerName = assertWorkerName(scriptName);
+    const name = assertBindingName(secretName);
+
+    await this.cloudflareClient.delete(
+      `accounts/${resolved.accountId}/workers/scripts/${workerName}/secrets/${name}`
+    );
+
+    return { name };
+  }
+
+  async listSchedules(accountId, scriptName) {
+    assertCloudflareId(accountId, "账号 ID");
+    const workerName = assertWorkerName(scriptName);
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/workers/scripts/${workerName}/schedules`
+    );
+    const schedules = Array.isArray(payload.result)
+      ? payload.result
+      : Array.isArray(payload.result?.schedules)
+        ? payload.result.schedules
+        : [];
+
+    return schedules.map(normalizeCronSchedule);
+  }
+
+  async updateSchedules(accountId, scriptName, input = {}) {
+    const resolved = await this.resolveAccountId(accountId);
+    const workerName = assertWorkerName(scriptName);
+    const payload = await this.cloudflareClient.put(
+      `accounts/${resolved.accountId}/workers/scripts/${workerName}/schedules`,
+      normalizeCronInput(input)
+    );
+    const schedules = Array.isArray(payload.result)
+      ? payload.result
+      : Array.isArray(payload.result?.schedules)
+        ? payload.result.schedules
+        : normalizeCronInput(input).schedules;
+
+    return {
+      accountId: resolved.accountId,
+      schedules: schedules.map(normalizeCronSchedule),
+    };
+  }
+
+  async listDeployments(accountId, scriptName) {
+    assertCloudflareId(accountId, "账号 ID");
+    const workerName = assertWorkerName(scriptName);
+    const payload = await this.cloudflareClient.get(
+      `accounts/${accountId}/workers/scripts/${workerName}/deployments`
+    );
+    const deployments = Array.isArray(payload.result)
+      ? payload.result
+      : Array.isArray(payload.result?.deployments)
+        ? payload.result.deployments
+        : [];
+
+    return deployments.map(normalizeDeployment);
+  }
+
+  async createTail(accountId, scriptName) {
+    const resolved = await this.resolveAccountId(accountId);
+    const workerName = assertWorkerName(scriptName);
+    const payload = await this.cloudflareClient.post(
+      `accounts/${resolved.accountId}/workers/scripts/${workerName}/tails`,
+      {}
+    );
+
+    return {
+      accountId: resolved.accountId,
+      tail: payload.result || {},
+      note: "Cloudflare Tail 会话用于实时日志流，请使用返回的 url 或 id 在前端建立日志查看连接。",
+    };
+  }
+
+  async listQueues(accountId = "") {
+    const resolved = await this.resolveAccountId(accountId);
+    const payload = await this.cloudflareClient.get(`accounts/${resolved.accountId}/queues`);
+    const queues = Array.isArray(payload.result)
+      ? payload.result
+      : Array.isArray(payload.result?.queues)
+        ? payload.result.queues
+        : [];
+
+    return queues.map(normalizeQueue);
   }
 
   async getSubdomainStatus(accountId, scriptName) {

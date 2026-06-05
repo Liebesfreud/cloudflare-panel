@@ -147,9 +147,31 @@ function renderBindingsPanel() {
       <div class="workers-domain-section-title">
         <div>
           <h3>资源绑定</h3>
-          <p>D1 数据库、KV 命名空间等资源会在后续功能接入。</p>
+          <p>绑定环境变量、KV、D1、R2、Queue 或 Service Binding。</p>
         </div>
       </div>
+      <form class="workers-inline-form workers-binding-form" id="worker-binding-form">
+        <label class="workers-field">
+          <span>类型</span>
+          <select name="type">
+            <option value="plain_text">环境变量</option>
+            <option value="kv_namespace">KV</option>
+            <option value="d1">D1</option>
+            <option value="r2_bucket">R2</option>
+            <option value="queue">Queue</option>
+            <option value="service">Service</option>
+          </select>
+        </label>
+        <label class="workers-field">
+          <span>绑定名</span>
+          <input name="name" placeholder="APP_CONFIG" />
+        </label>
+        <label class="workers-field">
+          <span>值 / 资源 ID</span>
+          <input name="value" placeholder="KV ID、D1 ID、bucket 或文本值" />
+        </label>
+        <button class="workers-primary-button" type="submit" ${state.workersPendingKey === "binding" ? "disabled" : ""}>保存绑定</button>
+      </form>
       ${
         bindings.length === 0
           ? `<p class="workers-muted">暂无绑定</p>`
@@ -168,6 +190,119 @@ function renderBindingsPanel() {
   `;
 }
 
+function renderSecretsPanel() {
+  const secrets = state.workersActiveDetail?.secrets || [];
+
+  return `
+    <section class="workers-domain-section">
+      <div class="workers-domain-section-title">
+        <div>
+          <h3>环境变量 Secret</h3>
+          <p>Secret 值不会在 Cloudflare API 中回显。</p>
+        </div>
+      </div>
+      <form class="workers-inline-form" id="worker-secret-form">
+        <label class="workers-field">
+          <span>名称</span>
+          <input name="name" placeholder="API_TOKEN" />
+        </label>
+        <label class="workers-field">
+          <span>Secret 值</span>
+          <input name="value" type="password" placeholder="不会回显" />
+        </label>
+        <button class="workers-primary-button" type="submit" ${state.workersPendingKey === "secret" ? "disabled" : ""}>保存 Secret</button>
+      </form>
+      <div class="workers-resource-list">
+        <h4>已保存的 Secret</h4>
+        ${
+          secrets.length === 0
+            ? `<p class="workers-muted">暂无 Secret</p>`
+            : secrets
+                .map(
+                  (secret) => `
+                    <div class="workers-resource-row">
+                      <span>${escapeHtml(secret.name)}</span>
+                      <em>${escapeHtml(secret.type || "secret_text")}</em>
+                      <button class="workers-icon-danger worker-secret-delete" type="button" data-secret-name="${escapeHtml(secret.name)}">
+                        ${icon("trash")}
+                      </button>
+                    </div>
+                  `
+                )
+                .join("")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderCronPanel() {
+  const schedules = state.workersActiveDetail?.schedules || [];
+
+  return `
+    <section class="workers-domain-section">
+      <div class="workers-domain-section-title">
+        <div>
+          <h3>Cron Triggers</h3>
+          <p>每行一个 Cron 表达式，保存后整体覆盖当前 Worker 的计划任务。</p>
+        </div>
+      </div>
+      <form class="workers-cron-form" id="worker-cron-form">
+        <label class="workers-field">
+          <span>Cron 表达式</span>
+          <textarea name="schedules" placeholder="*/5 * * * *">${escapeHtml(
+            schedules.map((item) => item.cron).join("\n")
+          )}</textarea>
+        </label>
+        <button class="workers-primary-button" type="submit" ${state.workersPendingKey === "cron" ? "disabled" : ""}>保存 Cron</button>
+      </form>
+    </section>
+  `;
+}
+
+function renderDeploymentsPanel() {
+  const deployments = state.workersActiveDetail?.deployments || [];
+
+  return `
+    <section class="workers-domain-section">
+      <div class="workers-domain-section-title">
+        <div>
+          <h3>版本 / 部署记录</h3>
+          <p>查看最近的 Worker 部署和版本信息。</p>
+        </div>
+        <button class="workers-outline-button" type="button" id="worker-tail-open" ${state.workersPendingKey === "tail" ? "disabled" : ""}>
+          ${state.workersPendingKey === "tail" ? "创建中..." : "打开日志 Tail"}
+        </button>
+      </div>
+      ${
+        state.workersTailInfo
+          ? `<div class="workers-tail-box">
+              <strong>Tail 会话已创建</strong>
+              <code>${escapeHtml(state.workersTailInfo.tail?.url || state.workersTailInfo.tail?.id || "请使用返回会话连接实时日志")}</code>
+            </div>`
+          : ""
+      }
+      <div class="workers-resource-list">
+        ${
+          deployments.length === 0
+            ? `<p class="workers-muted">暂无部署记录</p>`
+            : deployments
+                .slice(0, 6)
+                .map(
+                  (deployment) => `
+                    <div class="workers-resource-row">
+                      <span>${escapeHtml(deployment.id || deployment.versionId || "deployment")}</span>
+                      <em>${escapeHtml(deployment.createdOn || deployment.source || "-")}</em>
+                    </div>
+                  `
+                )
+                .join("")
+        }
+      </div>
+    </section>
+  `;
+}
+
 export function renderDomainManager() {
   return `
     <div class="workers-domain-grid">
@@ -175,6 +310,9 @@ export function renderDomainManager() {
       ${renderRoutesPanel()}
       ${renderDomainsPanel()}
       ${renderBindingsPanel()}
+      ${renderSecretsPanel()}
+      ${renderCronPanel()}
+      ${renderDeploymentsPanel()}
     </div>
   `;
 }

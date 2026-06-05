@@ -14,6 +14,7 @@ export function createApp({
   firewallRulesController,
   pageRulesController,
   speedDeployController,
+  sslSettingsController,
   workersController,
   zonesController,
 }) {
@@ -28,6 +29,7 @@ export function createApp({
     firewallRulesController,
     pageRulesController,
     speedDeployController,
+    sslSettingsController,
     workersController,
     zonesController,
   });

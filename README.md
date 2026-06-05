@@ -11,7 +11,7 @@
 - Workers：管理 Worker 脚本、workers.dev、路由和自定义域。
 - 开发资源：管理 Pages、D1 数据库、R2 存储桶、Workers KV、Cloudflare Tunnels。
 - Worker 模板库：本地保存常用 Worker 脚本模板，快速带入新建 Worker 弹窗。
-- 需求开发：侧栏入口直接跳转到 [GitHub Issues](https://github.com/heichi233/network/issues/new)。
+- 需求开发：侧栏入口直接跳转到 [GitHub Issues](https://github.com/baize-projects/network/issues/new)。
 
 ## 运行
 

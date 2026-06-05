@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { HttpError } from "../../lib/http-error.js";
-import { assertCloudflareId } from "./cloudflare-id.js";
+import { assertCloudflareId, assertCloudflareResourceId } from "./cloudflare-id.js";
 
 const firewallActions = new Set([
   "block",
@@ -11,6 +11,16 @@ const firewallActions = new Set([
   "log",
 ]);
 const firewallRuleTypes = new Set(["ip", "country", "asn", "custom", "expression"]);
+const rulesetPhases = new Set(["http_request_firewall_custom", "http_ratelimit"]);
+const rulesetActions = new Set([
+  "block",
+  "challenge",
+  "managed_challenge",
+  "js_challenge",
+  "log",
+  "skip",
+  "execute",
+]);
 
 function quoteExpressionValue(value) {
   return JSON.stringify(value);
@@ -32,6 +42,94 @@ function normalizeFirewallRule(rule) {
     createdOn: rule.created_on || filter.created_on || "",
     modifiedOn: rule.modified_on || filter.modified_on || "",
   };
+}
+
+function normalizeRulesetRule(rule = {}, ruleset = {}) {
+  return {
+    id: rule.id || "",
+    rulesetId: ruleset.id || rule.ruleset_id || "",
+    phase: ruleset.phase || "",
+    action: rule.action || "block",
+    description: rule.description || rule.ref || "",
+    expression: rule.expression || "",
+    enabled: rule.enabled !== false,
+    ref: rule.ref || "",
+    lastUpdated: rule.last_updated || "",
+    version: rule.version || "",
+    actionParameters: rule.action_parameters || null,
+    ratelimit: rule.ratelimit || null,
+  };
+}
+
+function normalizeRuleset(ruleset = {}, phase = "") {
+  const rules = Array.isArray(ruleset.rules) ? ruleset.rules : [];
+
+  return {
+    id: ruleset.id || "",
+    name: ruleset.name || (phase === "http_ratelimit" ? "Rate limiting rules" : "Custom WAF rules"),
+    phase: ruleset.phase || phase,
+    kind: ruleset.kind || "zone",
+    version: ruleset.version || "",
+    lastUpdated: ruleset.last_updated || "",
+    rules: rules.map((rule) => normalizeRulesetRule(rule, { ...ruleset, phase: ruleset.phase || phase })),
+  };
+}
+
+function normalizeRulesetPhase(input = {}) {
+  const phase = String(input.phase || "http_request_firewall_custom").trim();
+
+  if (!rulesetPhases.has(phase)) {
+    throw new HttpError(400, "Ruleset 阶段无效");
+  }
+
+  return phase;
+}
+
+function normalizeRulesetRuleInput(input = {}, phase = "http_request_firewall_custom") {
+  const action = String(input.action || "block").trim();
+  const expression = String(input.expression || input.target || "").trim();
+  const description = String(input.description || "").trim();
+  const enabled = input.enabled === undefined ? true : Boolean(input.enabled);
+  const body = { action, expression, description, enabled };
+
+  if (!rulesetActions.has(action)) {
+    throw new HttpError(400, "Ruleset 动作无效");
+  }
+
+  if (!expression || expression.length > 4096) {
+    throw new HttpError(400, "Ruleset 表达式不能为空，且长度不能超过 4096");
+  }
+
+  if (!description || description.length > 500) {
+    throw new HttpError(400, "Ruleset 描述不能为空，且长度不能超过 500");
+  }
+
+  if (phase === "http_ratelimit") {
+    const requestsPerPeriod = Number(input.requestsPerPeriod || 60);
+    const period = Number(input.period || 60);
+    const mitigationTimeout = Number(input.mitigationTimeout || 600);
+
+    if (!Number.isInteger(requestsPerPeriod) || requestsPerPeriod < 1) {
+      throw new HttpError(400, "速率限制请求数必须是正整数");
+    }
+
+    if (![10, 60].includes(period)) {
+      throw new HttpError(400, "速率限制统计周期只能是 10 或 60 秒");
+    }
+
+    if (!Number.isInteger(mitigationTimeout) || mitigationTimeout < 0) {
+      throw new HttpError(400, "速率限制缓解时长必须是非负整数");
+    }
+
+    body.ratelimit = {
+      characteristics: ["cf.colo.id", "ip.src"],
+      period,
+      requests_per_period: requestsPerPeriod,
+      mitigation_timeout: mitigationTimeout,
+    };
+  }
+
+  return body;
 }
 
 function buildExpression(type, target) {
@@ -192,5 +290,103 @@ export class FirewallRulesService {
     );
 
     return { id: payload.result?.id || ruleId };
+  }
+
+  async getRulesetState(zoneId) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const phases = ["http_request_firewall_custom", "http_ratelimit"];
+    const results = await Promise.allSettled(
+      phases.map((phase) => this.getRulesetEntrypoint(zoneId, phase))
+    );
+    const warnings = [];
+    const rulesets = {};
+
+    results.forEach((result, index) => {
+      const phase = phases[index];
+
+      if (result.status === "fulfilled") {
+        rulesets[phase] = result.value;
+        return;
+      }
+
+      if (result.reason?.statusCode === 404) {
+        rulesets[phase] = normalizeRuleset({ phase, rules: [] }, phase);
+        return;
+      }
+
+      warnings.push(`${phase}: ${result.reason.message}`);
+      rulesets[phase] = normalizeRuleset({ phase, rules: [] }, phase);
+    });
+
+    return { rulesets, warnings };
+  }
+
+  async getRulesetEntrypoint(zoneId, phase) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const normalizedPhase = normalizeRulesetPhase({ phase });
+    const payload = await this.cloudflareClient.get(
+      `zones/${zoneId}/rulesets/phases/${normalizedPhase}/entrypoint`
+    );
+
+    return normalizeRuleset(payload.result || {}, normalizedPhase);
+  }
+
+  async createRulesetRule(zoneId, input = {}) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const phase = normalizeRulesetPhase(input);
+    const rule = normalizeRulesetRuleInput(input, phase);
+    const entrypoint = await this.getRulesetEntrypoint(zoneId, phase).catch((error) => {
+      if (error.statusCode === 404) {
+        return null;
+      }
+
+      throw error;
+    });
+    const payload = entrypoint?.id
+      ? await this.cloudflareClient.post(
+          `zones/${zoneId}/rulesets/phases/${phase}/entrypoint/rules`,
+          rule
+        )
+      : await this.cloudflareClient.post(`zones/${zoneId}/rulesets`, {
+          name: phase === "http_ratelimit" ? "Rate limiting rules" : "Custom WAF rules",
+          description: "Managed by Cloudflare 优选面板",
+          kind: "zone",
+          phase,
+          rules: [rule],
+        });
+    const resultRule = payload.result?.rules?.at?.(-1) || payload.result;
+
+    return normalizeRulesetRule(resultRule || rule, {
+      id: payload.result?.id || entrypoint?.id || "",
+      phase,
+    });
+  }
+
+  async updateRulesetRule(zoneId, rulesetId, ruleId, input = {}) {
+    assertCloudflareId(zoneId, "区域 ID");
+    assertCloudflareResourceId(rulesetId, "Ruleset ID");
+    assertCloudflareResourceId(ruleId, "Ruleset 规则 ID");
+    const phase = normalizeRulesetPhase(input);
+    const payload = await this.cloudflareClient.patch(
+      `zones/${zoneId}/rulesets/${rulesetId}/rules/${ruleId}`,
+      normalizeRulesetRuleInput(input, phase)
+    );
+    const updatedRule = Array.isArray(payload.result?.rules)
+      ? payload.result.rules.find((rule) => rule.id === ruleId) || payload.result.rules.at(-1)
+      : payload.result;
+
+    return normalizeRulesetRule(updatedRule || {}, { id: rulesetId, phase });
+  }
+
+  async deleteRulesetRule(zoneId, rulesetId, ruleId) {
+    assertCloudflareId(zoneId, "区域 ID");
+    assertCloudflareResourceId(rulesetId, "Ruleset ID");
+    assertCloudflareResourceId(ruleId, "Ruleset 规则 ID");
+
+    await this.cloudflareClient.delete(
+      `zones/${zoneId}/rulesets/${rulesetId}/rules/${ruleId}`
+    );
+
+    return { id: ruleId, rulesetId };
   }
 }

@@ -26,7 +26,11 @@ export function createAnalyticsActions({ renderApp }) {
     renderApp();
 
     try {
-      state.analytics = await fetchZoneAnalytics(zoneId, rangeDays[state.analyticsRange]);
+      state.analytics = await fetchZoneAnalytics(zoneId, {
+        days: rangeDays[state.analyticsRange],
+        startDate: state.analyticsStartDate,
+        endDate: state.analyticsEndDate,
+      });
     } catch (error) {
       state.analyticsError = error.message;
     } finally {
@@ -36,11 +40,24 @@ export function createAnalyticsActions({ renderApp }) {
   }
 
   async function changeAnalyticsRange(range) {
+    state.analyticsStartDate = "";
+    state.analyticsEndDate = "";
     await loadZoneAnalytics(range);
+  }
+
+  async function submitAnalyticsRange(event) {
+    event.preventDefault();
+    const form = document.querySelector("#analytics-range-form");
+    const formData = form ? new FormData(form) : new FormData();
+    state.analyticsRange = "custom";
+    state.analyticsStartDate = String(formData.get("startDate") || "").trim();
+    state.analyticsEndDate = String(formData.get("endDate") || "").trim();
+    await loadZoneAnalytics("custom");
   }
 
   return {
     changeAnalyticsRange,
     loadZoneAnalytics,
+    submitAnalyticsRange,
   };
 }

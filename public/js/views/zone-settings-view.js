@@ -3,6 +3,7 @@ import { renderCacheSettingsView } from "./zone/cache-view.js";
 import { renderCertificatesSettingsView } from "./zone/certificates-view.js";
 import { renderFirewallSettingsView } from "./zone/firewall-view.js";
 import { renderPageRulesSettingsView } from "./zone/page-rules-view.js";
+import { renderSslSettingsView } from "./zone/ssl-view.js";
 import { renderStaticSettingsView } from "./zone/static-settings-view.js";
 
 export function renderZoneSettingsView(section) {
@@ -12,6 +13,10 @@ export function renderZoneSettingsView(section) {
 
   if (section === "cache") {
     return renderCacheSettingsView();
+  }
+
+  if (section === "ssl") {
+    return renderSslSettingsView();
   }
 
   if (section === "firewall") {

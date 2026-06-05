@@ -2280,3 +2280,165 @@ node --test test/**/*.test.js
 - R2 后续可补对象列表、上传、公开访问/自定义域。
 - KV 后续可补 key/value 读取、编辑、过期时间。
 - Tunnels 后续可补 connector token 展示、ingress 规则、运行状态详情。
+
+## 2026-06-05 剩余功能集中实现：SSL/TLS、证书、WAF、统计、Workers 深层、资源深层、一键加速管理
+
+用户要求把此前列出的未实现项继续补齐。本次按现有原生 Node.js 项目结构继续拆分服务、控制器、视图和样式，保持服务器端管理 Cloudflare Global API Key，前端不暴露敏感凭据。
+
+后端新增/扩展：
+
+- `src/services/cloudflare/ssl-settings-service.js`
+  - 新增真实 SSL/TLS 设置读取和更新。
+  - 支持 `ssl`、`always_use_https`、`automatic_https_rewrites`、`min_tls_version`、`tls_1_3`、`opportunistic_encryption`、`websockets`、`http3`。
+- `src/controllers/ssl-settings-controller.js`
+  - 新增 `GET/PATCH /api/zones/:zoneId/ssl-settings`。
+- `src/services/cloudflare/certificates-service.js`
+  - 自定义证书上传：`POST /zones/{zone_id}/custom_certificates`。
+  - Origin CA 列表/创建/删除：`GET/POST /certificates`、`DELETE /certificates/{id}`。
+  - 私钥只提交到后端转发给 Cloudflare，不回传到前端状态。
+- `src/services/cloudflare/firewall-rules-service.js`
+  - 保留旧版 Firewall Rules CRUD。
+  - 新增 Rulesets entrypoint 读取、创建 WAF 自定义规则、Rate Limiting/防 CC 规则、删除/更新 Ruleset rule。
+  - 新增 phase：`http_request_firewall_custom`、`http_ratelimit`。
+- `src/services/cloudflare/analytics-service.js`
+  - 支持自定义 `startDate/endDate`，最大 90 天。
+  - 新增安全事件采样读取 `firewallEventsAdaptiveGroups`，失败时降级为 warnings。
+- `src/services/cloudflare/workers-service.js`
+  - Worker 详情新增读取 schedules、deployments、secrets、queues。
+  - 新增 settings/bindings 更新、Secret 创建/删除、Cron Triggers 覆盖保存、Tail 会话创建、Queues 列表。
+- `src/services/cloudflare/developer-resources-service.js`
+  - Pages：详情、部署记录、自定义域、构建配置保存。
+  - D1：详情、表列表、SQL 查询。
+  - R2：桶详情、对象列表、文本对象上传、对象删除。
+  - KV：命名空间详情、Key 列表、Value 读取/保存/删除。
+  - Tunnels：详情、configuration 读取/保存、connector token 按需读取。
+- `src/services/cloudflare/speed-deploy-service.js`
+  - 已加速域名列表改为真实同步 Cloudflare DNS 备注和 custom hostnames。
+  - 删除加速域名改为删除面板管理的访问域名 CNAME 与对应 SaaS custom hostname。
+  - 不自动删除共享回退源，避免误伤其它加速域名。
+- `src/services/cloudflare/cloudflare-client.js`
+  - 新增 `getRaw/postRaw/putRaw/sendRaw`，支持 KV/R2 原始文本或对象内容。
+  - 修复 Cloudflare `204 No Content` 成功响应被当作错误的边界条件。
+
+前端新增/扩展：
+
+- `public/js/views/zone/ssl-view.js`
+  - 新增真实 SSL/TLS 设置页，替换原静态壳子。
+  - 模式卡片、最低 TLS 版本、HTTPS/TLS/WebSockets/HTTP3 等开关都接真实 API。
+- `public/js/views/zone/certificates-view.js`
+  - 自定义证书上传表单可用。
+  - Origin CA 创建表单、最近创建证书展示、Origin CA 列表/删除可用。
+- `public/js/views/zone/firewall-view.js`
+  - 新增 WAF / Rate Limiting 规则创建区。
+  - 新增 Rulesets 规则列表和删除。
+  - 旧版 Firewall Rules 区保留。
+- `public/js/views/zone/analytics-view.js`
+  - 新增自定义日期范围查询。
+  - 新增安全事件采样列表和 warnings 展示。
+- `public/js/views/workers/domain-manager-view.js`
+  - 新增资源绑定、Secret、Cron Triggers、部署记录、Tail 会话入口。
+- `public/js/views/developer-resources-view.js`
+  - 资源列表新增“管理”按钮。
+  - 新增详情面板，按 Pages/D1/R2/KV/Tunnels 渲染深层操作。
+- `public/js/actions/*.js`、`public/js/api.js`、`public/js/events.js`、`public/js/state.js`
+  - 接入上述新增 API、状态字段和事件绑定。
+- CSS：
+  - `public/css/zone/settings.css`
+  - `public/css/zone/certificates.css`
+  - `public/css/zone/firewall.css`
+  - `public/css/zone/analytics.css`
+  - `public/css/features/workers.css`
+  - `public/css/features/developer-resources.css`
+  - 新增区域控制在紧凑后台字号，按钮 12px-14px，卡片圆角保持 8px。
+
+测试新增/更新：
+
+- 新增 `test/advanced-cloudflare.test.js`
+  - 覆盖 SSL 设置读写。
+  - 覆盖自定义证书上传和 Origin CA 创建。
+  - 覆盖新版 Rulesets rule 创建。
+  - 覆盖一键加速真实列表和删除。
+- 更新 `test/smoke.test.js`
+  - Analytics 增加安全事件 GraphQL 查询断言。
+  - 证书状态增加 Origin CA 读取 warning/请求断言。
+- 更新 `test/workers.test.js`
+  - Worker 详情增加 schedules、deployments、secrets、queues 深层读取断言。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- 全量 Node 测试 27 项全部通过。
+
+安全边界：
+
+- 浏览器验收仍默认只读，不点击会对真实 Cloudflare 写入的按钮。
+- 自定义证书私钥不会写入前端状态，不会在列表中回显。
+- Tunnel token 只在用户点击“读取 Token”时请求，不随默认详情读取。
+- 一键加速删除仅删除有面板备注/匹配的托管资源，不清理共享 `saas.{zone}` 回退源。
+
+后续可继续精修：
+
+- Rulesets 更新/启停 UI 目前主要支持创建和删除，后续可补编辑/暂停。
+- Workers Tail 当前是会话创建入口，后续可补真实日志流视图。
+- R2 对象上传当前前端为文本内容入口，后续可补文件选择和 multipart 上传。
+- D1 查询参数化输入、结果表格化展示可继续增强。
+
+## 2026-06-05 收口验收与开源仓库入口修正
+
+本次在剩余功能集中实现后继续做运行态收口，重点检查真实页面能否打开、字号是否保持紧凑、开源仓库入口是否正确，以及提交前敏感信息边界。
+
+补丁内容：
+
+- `public/js/constants.js`
+  - 新增 `githubIssueUrl` 常量，统一维护需求开发跳转地址。
+- `public/js/views/shell-view.js`
+  - 侧栏“需求开发”入口改为当前开源仓库：
+    `https://github.com/baize-projects/network/issues/new`。
+- `README.md`
+  - 同步更新 GitHub Issues 地址，避免文档仍指向旧仓库。
+- `public/css/dns/summary.css`
+  - 单域名摘要标题从 24px 压到 18px，匹配原版紧凑后台字号。
+- `public/css/responsive.css`
+  - 移动端 DNS 表单标题从 26px 压到 20px，避免 DNS/SSL/TLS/缓存相关页面标题过大。
+
+本地服务：
+
+```bash
+PORT=3003 node src/server.js
+```
+
+说明：当前环境没有 `npm` 命令，但项目是无依赖原生 Node.js 项目，使用 `node src/server.js` 可以直接运行。
+
+验证命令：
+
+```bash
+find src public/js test -name '*.js' -print -exec node --check {} \;
+node --test test/**/*.test.js
+git diff --check
+```
+
+验证结果：
+
+- JS 语法检查通过。
+- Node test 全量 27 项全部通过。
+- `git diff --check` 通过，无尾随空白等补丁格式问题。
+- 浏览器只读验收通过：
+  - 登录页只显示脱敏账号，不暴露 Global API Key。
+  - 域名列表能读取真实 Zone。
+  - 单域名 DNS、SSL/TLS、证书管理、防火墙、统计分析、缓存、页面规则均可打开，无横向溢出。
+  - 一键加速、Workers、Pages、D1、R2、KV、Tunnels、自动优化均可打开，无浏览器 console error。
+  - 一键加速默认优选域名为 `saas.sin.fan`，并保留自定义优选域名输入。
+  - Workers 编辑页能打开，代码编辑/域名管理标签正常展示。
+
+安全边界：
+
+- 本轮浏览器验收只读，不提交 Cloudflare 写操作表单。
+- `.env`、`.env.*`、根目录截图继续被 `.gitignore` 排除。
+- 提交前需要继续确认不暂存真实 Cloudflare 凭据或私钥。

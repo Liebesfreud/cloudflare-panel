@@ -199,6 +199,55 @@ function createWorkersMock({ accountId, zoneId, requests }) {
       return;
     }
 
+    if (
+      request.method === "GET" &&
+      url.pathname === `/accounts/${accountId}/workers/scripts/hello-worker/schedules`
+    ) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ cron: "*/5 * * * *", created_on: "2026-01-01T00:00:00Z" }],
+      });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname === `/accounts/${accountId}/workers/scripts/hello-worker/deployments`
+    ) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ id: "deployment-1", source: "api", created_on: "2026-01-01T00:00:00Z" }],
+      });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname === `/accounts/${accountId}/workers/scripts/hello-worker/secrets`
+    ) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ name: "API_TOKEN", type: "secret_text" }],
+      });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === `/accounts/${accountId}/queues`) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ queue_id: "queue-1", queue_name: "jobs" }],
+      });
+      return;
+    }
+
     if (request.method === "PUT" && url.pathname === `/accounts/${accountId}/workers/scripts/hello-worker`) {
       assert.match(request.headers["content-type"] || "", /multipart\/form-data/);
       assert.match(body.text, /name="metadata"/);
@@ -328,6 +377,10 @@ test("manages Workers scripts, subdomain, routes, and custom domains through Clo
     assert.match(detailPayload.worker.script, /Hello from test/);
     assert.equal(detailPayload.worker.subdomain.enabled, true);
     assert.equal(detailPayload.worker.settings.bindings[0].name, "KV_CACHE");
+    assert.equal(detailPayload.worker.schedules[0].cron, "*/5 * * * *");
+    assert.equal(detailPayload.worker.deployments[0].id, "deployment-1");
+    assert.equal(detailPayload.worker.secrets[0].name, "API_TOKEN");
+    assert.equal(detailPayload.worker.queues[0].name, "jobs");
 
     const uploadResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/workers/hello-worker`,
@@ -417,6 +470,10 @@ test("manages Workers scripts, subdomain, routes, and custom domains through Clo
         ["GET", `/accounts/${accountId}/workers/scripts/hello-worker/subdomain`],
         ["GET", `/accounts/${accountId}/workers/scripts/hello-worker/settings`],
         ["GET", `/accounts/${accountId}/workers/domains`],
+        ["GET", `/accounts/${accountId}/workers/scripts/hello-worker/schedules`],
+        ["GET", `/accounts/${accountId}/workers/scripts/hello-worker/deployments`],
+        ["GET", `/accounts/${accountId}/workers/scripts/hello-worker/secrets`],
+        ["GET", `/accounts/${accountId}/queues`],
         ["PUT", `/accounts/${accountId}/workers/scripts/hello-worker`],
         ["GET", `/zones/${zoneId}/workers/routes`],
         ["POST", `/zones/${zoneId}/workers/routes`],

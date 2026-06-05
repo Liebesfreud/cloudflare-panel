@@ -3,12 +3,17 @@ import {
   createWorkerDomain,
   createWorkerRoute,
   fetchWorker,
+  createWorkerTail,
   fetchWorkerRoutes,
   fetchWorkers,
+  removeWorkerSecret,
   removeWorker,
   removeWorkerDomain,
   removeWorkerRoute,
   saveWorkerScript,
+  saveWorkerSecret,
+  saveWorkerSettings,
+  saveWorkerSchedules,
   saveWorkerSubdomain,
 } from "../api.js";
 import { state } from "../state.js";
@@ -298,6 +303,142 @@ export function createWorkersActions({ renderApp }) {
     renderApp();
   }
 
+  async function submitWorkerBinding(event) {
+    event.preventDefault();
+    const formData = readForm("#worker-binding-form");
+    const type = String(formData.get("type") || "plain_text");
+    const name = String(formData.get("name") || "").trim().toUpperCase();
+    const value = String(formData.get("value") || "").trim();
+    const currentBindings = state.workersActiveDetail?.settings?.bindings || [];
+    const binding = {
+      type,
+      name,
+      text: value,
+      namespaceId: value,
+      databaseId: value,
+      bucketName: value,
+      queueName: value,
+      service: value,
+    };
+
+    state.workersPendingKey = "binding";
+    renderApp();
+
+    try {
+      const payload = await saveWorkerSettings(activeWorkerName(), {
+        accountId: activeAccountId(),
+        bindings: [binding, ...currentBindings.filter((item) => item.name !== name)],
+      });
+      state.workersActiveDetail = {
+        ...state.workersActiveDetail,
+        settings: payload.settings,
+      };
+      setNotice("Worker 绑定已保存");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
+  async function submitWorkerSecret(event) {
+    event.preventDefault();
+    const formData = readForm("#worker-secret-form");
+    const name = String(formData.get("name") || "").trim().toUpperCase();
+    const value = String(formData.get("value") || "");
+
+    state.workersPendingKey = "secret";
+    renderApp();
+
+    try {
+      const secret = await saveWorkerSecret(activeWorkerName(), {
+        accountId: activeAccountId(),
+        name,
+        value,
+      });
+      state.workersActiveDetail = {
+        ...state.workersActiveDetail,
+        secrets: [secret, ...(state.workersActiveDetail?.secrets || []).filter((item) => item.name !== name)],
+      };
+      setNotice("Worker Secret 已保存");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
+  async function deleteWorkerSecret(secretName) {
+    if (!secretName || !window.confirm("确定删除这个 Secret 吗？")) {
+      return;
+    }
+
+    state.workersPendingKey = "secret";
+    renderApp();
+
+    try {
+      await removeWorkerSecret(activeWorkerName(), secretName, activeAccountId());
+      state.workersActiveDetail = {
+        ...state.workersActiveDetail,
+        secrets: (state.workersActiveDetail?.secrets || []).filter(
+          (secret) => secret.name !== secretName
+        ),
+      };
+      setNotice("Worker Secret 已删除");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
+  async function submitWorkerSchedules(event) {
+    event.preventDefault();
+    const formData = readForm("#worker-cron-form");
+    const schedules = String(formData.get("schedules") || "")
+      .split(/\n+/)
+      .map((cron) => cron.trim())
+      .filter(Boolean);
+
+    state.workersPendingKey = "cron";
+    renderApp();
+
+    try {
+      const payload = await saveWorkerSchedules(activeWorkerName(), {
+        accountId: activeAccountId(),
+        schedules,
+      });
+      state.workersActiveDetail = {
+        ...state.workersActiveDetail,
+        schedules: payload.schedules,
+      };
+      setNotice("Cron Triggers 已保存");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
+  async function openWorkerTail() {
+    state.workersPendingKey = "tail";
+    renderApp();
+
+    try {
+      state.workersTailInfo = await createWorkerTail(activeWorkerName(), activeAccountId());
+      setNotice("Worker Tail 会话已创建");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
   async function submitWorkerRoute(event) {
     event.preventDefault();
     const formData = readForm("#worker-route-form");
@@ -458,6 +599,7 @@ export function createWorkersActions({ renderApp }) {
     changeWorkerTab,
     closeWorkersModal,
     confirmDeleteWorker,
+    deleteWorkerSecret,
     deleteWorkerDomain,
     deleteWorkerRoute,
     ensureWorkersLoaded,
@@ -468,8 +610,12 @@ export function createWorkersActions({ renderApp }) {
     requestDeleteWorker,
     submitCreateWorker,
     submitWorkerDomain,
+    submitWorkerBinding,
+    submitWorkerSecret,
+    submitWorkerSchedules,
     submitWorkerRoute,
     submitWorkerScript,
+    openWorkerTail,
     toggleWorkerSubdomain,
     updateWorkerDeleteConfirm,
   };

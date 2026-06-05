@@ -358,6 +358,120 @@
   width: min(520px, 100%);
 }
 
+.devres-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.devres-detail-card {
+  overflow: hidden;
+}
+
+.devres-detail-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.devres-detail-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.devres-detail-form textarea {
+  min-height: 120px;
+}
+
+.devres-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.devres-detail-grid section,
+.devres-token-box {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.devres-detail-grid h3,
+.devres-token-box h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.devres-token-box p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.devres-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.devres-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9fafb;
+  padding: 8px 10px;
+}
+
+.devres-detail-row span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devres-detail-row em {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 15px;
+  padding: 2px 7px;
+}
+
+.devres-code-block {
+  overflow: auto;
+  max-height: 280px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
 .template-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -443,6 +557,7 @@
   }
 
   .devres-summary-grid,
+  .devres-detail-grid,
   .template-grid {
     grid-template-columns: 1fr;
   }
