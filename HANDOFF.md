@@ -2789,3 +2789,46 @@ find src public/js test -name '*.js' -print -exec node --check {} \;
 
 - 新增前端 API 边界测试 3 项通过。
 - JS 语法检查通过。
+
+后续线上复查注意：
+
+- GitHub Pages 资源默认会被缓存一段时间。若线上 `public/js/api.js` 已更新但浏览器仍显示旧 `Unexpected token '<'`，优先检查 HTML/JS 模块缓存，而不是重复修改 API 错误处理逻辑。
+
+## 2026-06-05 GitHub Pages 静态资源版本化
+
+线上最终复查时确认样式已恢复，且 `https://baize-projects.github.io/network/js/api.js` 已经返回新代码，但 in-app browser 仍显示旧的 `Unexpected token '<'`。原因是 GitHub Pages 和浏览器可能继续复用旧 ES Module 图，单纯更新 `api.js` 不一定会立刻刷新已经加载过的模块依赖。
+
+修复内容：
+
+- 新增 `scripts/build-pages.js`
+  - 复制 `public/` 到 `_site/`。
+  - 写入 `_site/.nojekyll`。
+  - 仅在 `_site/` 产物中给本地静态资源追加 `?v=<commit-sha>`。
+  - 覆盖 HTML `href/src`、JS `import/from`、JS 模板中的本地图标 `src`、CSS `url(...)`。
+  - 不改 `/api/...`、外部链接、hash-only 链接。
+- `.github/workflows/publish-pages-branch.yml`
+  - JS 语法检查范围从 `src public/js test` 扩展到 `src public scripts test`。
+  - Pages 构建从手写 `cp -R public/. _site/` 改为 `node scripts/build-pages.js _site "${GITHUB_SHA}"`。
+- `package.json`
+  - 新增 `build:pages` 脚本。
+- `.gitignore`
+  - 新增 `_site/`，避免本地 Pages 产物误提交。
+- `test/pages-build.test.js`
+  - 覆盖 `versionUrl()` 对本地资源、`/api`、外部链接的处理。
+  - 覆盖生成后的 `index.html`、`app.js`、模块 import、CSS import、品牌图标路径均带版本号。
+- `DEPLOYMENT.md`
+  - 增加 GitHub Pages 静态发布说明和本地构建命令。
+
+验证命令：
+
+```bash
+node --test test/pages-build.test.js
+find src public scripts test -name '*.js' -print -exec node --check {} \;
+node scripts/build-pages.js _site local-check
+```
+
+验证结果：
+
+- Pages 构建版本化测试 2 项通过。
+- JS 语法检查通过。
+- 本地 `_site` 产物会把 `./app.js`、`./styles.css`、模块 import、CSS `@import` 等资源追加统一版本号。

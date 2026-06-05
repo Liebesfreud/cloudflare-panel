@@ -97,6 +97,31 @@ PORT=3000 npm start
 
 生产环境建议使用 systemd、PM2 或其他进程管理器托管进程，保证异常退出后自动拉起。
 
+## GitHub Pages 静态发布
+
+仓库内置 `.github/workflows/publish-pages-branch.yml`，推送 `main` 后会自动：
+
+1. 检查 `src`、`public`、`scripts`、`test` 下的 JavaScript 语法。
+2. 运行 `node --test test/**/*.test.js`。
+3. 执行 `node scripts/build-pages.js _site "$GITHUB_SHA"` 生成静态产物。
+4. 把 `_site/` 强制推送到 `pages` 分支。
+
+本地也可以生成 Pages 产物：
+
+```bash
+npm run build:pages
+```
+
+如果没有 `npm`：
+
+```bash
+node scripts/build-pages.js _site local-check
+```
+
+`scripts/build-pages.js` 会在 `_site/` 内给 HTML、JS 模块 import、CSS `@import` 和本地图片资源追加 `?v=<commit-sha>`，避免 GitHub Pages 或浏览器缓存旧 JS/CSS 导致样式、脚本不同步。
+
+注意：GitHub Pages 只能托管静态文件。Pages 页面可用于打开前端界面和展示样式，但真实 Cloudflare 管理功能仍需要部署并访问 Node.js 后端。
+
 ## systemd 示例
 
 假设项目部署在 `/opt/network`，Node 路径是 `/usr/bin/node`：

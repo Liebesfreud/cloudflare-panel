@@ -27,17 +27,13 @@ jobs:
           node-version: "24"
 
       - name: Check JavaScript syntax
-        run: find src public/js test -name '*.js' -print -exec node --check {} \;
+        run: find src public scripts test -name '*.js' -print -exec node --check {} \;
 
       - name: Run tests
         run: node --test test/**/*.test.js
 
       - name: Build GitHub Pages static output
-        run: |
-          rm -rf _site
-          mkdir -p _site
-          cp -R public/. _site/
-          touch _site/.nojekyll
+        run: node scripts/build-pages.js _site "${GITHUB_SHA}"
 
       - name: Publish pages branch
         run: |

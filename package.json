@@ -6,6 +6,7 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
+    "build:pages": "node scripts/build-pages.js",
     "dev": "node src/server.js",
     "start": "NODE_ENV=production node src/server.js",
     "test": "node --test test/**/*.test.js"
