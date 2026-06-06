@@ -71,6 +71,146 @@ docker run -d \
   baize233/network:latest
 ```
 
+## 常用教程
+
+下面命令默认容器名为 `cloudflare-preferred-panel`，数据卷为 `cloudflare-panel-data`。执行会修改 SQLite 的操作前，先备份。
+
+### 查看首次初始化口令
+
+默认情况下，完整初始化口令不会写入日志，只会写入容器内文件：
+
+```bash
+docker logs cloudflare-preferred-panel
+docker exec cloudflare-preferred-panel cat /data/setup-token.txt
+```
+
+如果启动时显式设置了 `SETUP_TOKEN`，则使用你配置的值，不会生成 `/data/setup-token.txt`。
+
+### 重置管理员账号、密码和 2FA
+
+当前版本没有单独的“修改密码”接口。忘记管理员密码或丢失 2FA 时，需要清空管理员记录并重新走第 1 页初始化；已保存的 Cloudflare 账号会保留。
+
+```bash
+docker stop cloudflare-preferred-panel
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /data/panel.sqlite* /backup/'
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  baize233/network:latest \
+  node --experimental-sqlite -e 'const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync("/data/panel.sqlite"); db.exec("DELETE FROM panel_user;"); db.close();'
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  alpine sh -c 'rm -f /data/setup-token.txt'
+
+docker start cloudflare-preferred-panel
+docker exec cloudflare-preferred-panel cat /data/setup-token.txt
+```
+
+然后打开面板，输入新的初始化口令，重新创建管理员用户名、密码和 2FA。因为 Cloudflare 账号表未删除，通常不需要重新录入 Cloudflare API Key；如果浏览器还停留在旧登录状态，清理 Cookie 后重新登录即可。
+
+### 重置 Cloudflare API Key
+
+如果 Cloudflare Global API Key 泄露、失效或要整体换账号，推荐清空已保存的 Cloudflare 账号，再通过初始化第 2 页重新录入。管理员账号和 2FA 会保留。
+
+```bash
+docker stop cloudflare-preferred-panel
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /data/panel.sqlite* /backup/'
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  baize233/network:latest \
+  node --experimental-sqlite -e 'const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync("/data/panel.sqlite"); db.exec("DELETE FROM cloudflare_accounts;"); db.close();'
+
+docker start cloudflare-preferred-panel
+```
+
+重新打开面板并登录管理员账号后，会进入 Cloudflare 账号添加页，录入新的邮箱和 Global API Key。
+
+### 完全重新初始化
+
+如果要同时重置管理员、2FA 和全部 Cloudflare 账号：
+
+```bash
+docker stop cloudflare-preferred-panel
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /data/panel.sqlite* /backup/ && cp /data/secret.key /backup/secret.key.before-full-reset'
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  alpine sh -c 'rm -f /data/panel.sqlite /data/panel.sqlite-* /data/setup-token.txt'
+
+docker start cloudflare-preferred-panel
+docker exec cloudflare-preferred-panel cat /data/setup-token.txt
+```
+
+注意不要随便删除 `/data/secret.key`。如果只是重新初始化，可以保留它；如果你也更换了外部 `PANEL_SECRET_KEY_FILE`，旧数据库里的敏感字段将无法解密。
+
+### 备份和恢复
+
+备份：
+
+```bash
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /data/panel.sqlite* /backup/ && cp /data/secret.key /backup/secret.key.backup'
+```
+
+恢复：
+
+```bash
+docker stop cloudflare-preferred-panel
+
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'rm -f /data/panel.sqlite /data/panel.sqlite-* && cp /backup/panel.sqlite* /data/ && cp /backup/secret.key.backup /data/secret.key'
+
+docker start cloudflare-preferred-panel
+```
+
+如果使用 `PANEL_SECRET_KEY_FILE`，要单独备份和保护那个外部密钥文件，不要只备份 SQLite。
+
+### 升级镜像
+
+```bash
+docker pull baize233/network:latest
+docker stop cloudflare-preferred-panel
+docker rm cloudflare-preferred-panel
+docker run -d \
+  --name cloudflare-preferred-panel \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v cloudflare-panel-data:/data \
+  baize233/network:latest
+```
+
+使用 compose 时：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 查看日志和健康状态
+
+```bash
+docker logs --tail 200 cloudflare-preferred-panel
+docker inspect --format='{{json .State.Health}}' cloudflare-preferred-panel
+```
+
 ## 项目结构
 
 ```text

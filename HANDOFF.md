@@ -3248,3 +3248,26 @@ node --test test/smoke.test.js
 - 初始化 token 不再完整进入日志，但 `/data/setup-token.txt` 在首次初始化前仍是高敏感文件；不要把未初始化容器公开暴露给不可信用户。
 - `PANEL_SECRET_KEY` 是敏感环境变量，仅建议临时或受控环境使用；生产更推荐 `PANEL_SECRET_KEY_FILE`。
 - D1 mutation 开关只适合临时维护窗口；开启后，已登录面板用户对 Cloudflare D1 拥有任意 SQL 能力。
+
+## 2026-06-07 README 常用运维教程
+
+用户要求在 README 加一些常用教程，例如重置账户密码、重置 Cloudflare API。当前版本没有面板内“修改管理员密码 / 修改已保存 Cloudflare Global API Key”的独立接口，因此 README 采用 Docker-only 运维流程说明：先备份 SQLite，再停容器，通过 SQLite 清理对应初始化表，最后重新走初始化页面。
+
+本次变更：
+
+- `README.md` 新增“常用教程”章节：
+  - 查看首次初始化口令：日志只看掩码，完整口令读取 `/data/setup-token.txt`。
+  - 重置管理员账号、密码和 2FA：删除 `panel_user`，保留 `cloudflare_accounts`。
+  - 重置 Cloudflare API Key：删除 `cloudflare_accounts`，保留管理员和 2FA。
+  - 完全重新初始化：删除 `panel.sqlite*` 和 `setup-token.txt`，保留 `secret.key`。
+  - 备份和恢复：备份 `panel.sqlite*` 和 `secret.key`。
+  - 升级镜像：Docker run 和 compose 两种方式。
+  - 查看日志和健康状态。
+- 命令设计：
+  - 修改 SQLite 的命令使用 `baize233/network:latest node --experimental-sqlite -e ...`，避免依赖 Alpine 镜像自带 `sqlite3`。
+  - 备份命令使用 `panel.sqlite*`，覆盖 SQLite WAL/SHM 文件。
+
+安全边界：
+
+- README 明确所有修改 SQLite 的操作前要先备份。
+- 未提供直接手工写入加密字段的教程，避免用户绕过 AES-GCM 密钥处理导致 Cloudflare Global API Key 或 2FA seed 损坏。
