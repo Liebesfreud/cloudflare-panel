@@ -136,6 +136,9 @@ export const state = {
   workersRoutes: [],
   workersRoutesLoading: false,
   workersDomainZoneId: "",
+  workersPreferredZoneId: "",
+  workersPreferredPattern: "",
+  workersPreferredHostname: "saas.sin.fan",
   workersBindingFormOpen: false,
   workersCronDraft: "",
   workersSecretDraftName: "",
@@ -347,6 +350,9 @@ export function resetWorkersState() {
   state.workersRoutes = [];
   state.workersRoutesLoading = false;
   state.workersDomainZoneId = "";
+  state.workersPreferredZoneId = "";
+  state.workersPreferredPattern = "";
+  state.workersPreferredHostname = "saas.sin.fan";
   state.workersBindingFormOpen = false;
   state.workersCronDraft = "";
   state.workersSecretDraftName = "";

@@ -3,11 +3,14 @@ import { state } from "../../state.js";
 import { escapeHtml } from "../../utils.js";
 import {
   activeDomainZoneId,
+  activePreferredZoneId,
   activeRouteZoneId,
   activeWorkerName,
   findZone,
   renderZoneOptions,
 } from "./helpers.js";
+
+const defaultPreferredHostname = "saas.sin.fan";
 
 function renderSubdomainPanel() {
   const workerName = activeWorkerName();
@@ -82,6 +85,51 @@ function renderRoutesPanel() {
                   )
                   .join("")
         }
+      </div>
+    </section>
+  `;
+}
+
+function renderPreferredRoutePanel() {
+  const zoneId = activePreferredZoneId();
+  const zone = findZone(zoneId);
+  const pending = state.workersPendingKey === "preferred-route";
+  const preferredHostname = state.workersPreferredHostname || defaultPreferredHostname;
+
+  return `
+    <section class="workers-domain-section workers-preferred-section">
+      <div class="workers-domain-section-title">
+        <div>
+          <h3>Worker 优选</h3>
+          <p>添加路由模式，并在 DNS 中创建不代理的 CNAME。</p>
+        </div>
+      </div>
+      <form class="workers-preferred-form" id="worker-preferred-route-form">
+        <label class="workers-field">
+          <span>域名区域</span>
+          <select id="worker-preferred-zone" name="zoneId" ${state.zones.length === 0 ? "disabled" : ""}>
+            ${renderZoneOptions(zoneId)}
+          </select>
+        </label>
+        <label class="workers-field">
+          <span>访问域名</span>
+          <input name="pattern" value="${escapeHtml(state.workersPreferredPattern || "")}" placeholder="${zone ? `fangwen.${escapeHtml(zone.name)}` : "fangwen.100222.xyz"}" ${!zone ? "disabled" : ""} />
+          <small>提交时自动使用 访问域名 + /* 的路由模式</small>
+        </label>
+        <label class="workers-field">
+          <span>优选域名</span>
+          <input name="preferredHostname" value="${escapeHtml(preferredHostname)}" placeholder="${defaultPreferredHostname}" ${!zone ? "disabled" : ""} />
+          <small>DNS CNAME 指向这里，默认不开启代理</small>
+        </label>
+        <button class="workers-primary-button" type="submit" ${!zone || pending ? "disabled" : ""}>
+          ${pending ? "添加中..." : "添加优选"}
+        </button>
+      </form>
+      <div class="workers-route-preview">
+        <span>路由模式</span>
+        <code>fangwen.${escapeHtml(zone?.name || "100222.xyz")}/*</code>
+        <span>DNS</span>
+        <code>CNAME fangwen.${escapeHtml(zone?.name || "100222.xyz")} -&gt; ${escapeHtml(preferredHostname)}</code>
       </div>
     </section>
   `;
@@ -307,6 +355,7 @@ export function renderDomainManager() {
   return `
     <div class="workers-domain-grid">
       ${renderSubdomainPanel()}
+      ${renderPreferredRoutePanel()}
       ${renderRoutesPanel()}
       ${renderDomainsPanel()}
       ${renderBindingsPanel()}

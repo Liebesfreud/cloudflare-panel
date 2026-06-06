@@ -533,6 +533,20 @@ export async function createWorkerRoute(scriptName, request) {
   return payload.route;
 }
 
+export async function createWorkerPreferredRoute(scriptName, request) {
+  const response = await apiFetch(
+    `/api/workers/${encodeURIComponent(scriptName)}/preferred-route`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  const payload = await readJson(response, "添加 Worker 优选失败");
+
+  return payload.deployment;
+}
+
 export async function removeWorkerRoute(scriptName, routeId, zoneId) {
   const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/routes/${encodeURIComponent(

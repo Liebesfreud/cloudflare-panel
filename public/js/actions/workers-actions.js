@@ -1,6 +1,7 @@
 import {
   createWorker,
   createWorkerDomain,
+  createWorkerPreferredRoute,
   createWorkerRoute,
   fetchWorker,
   createWorkerTail,
@@ -64,6 +65,31 @@ function selectedDomainZoneId() {
   return state.workersDomainZoneId || firstZoneId();
 }
 
+function selectedPreferredZoneId() {
+  return state.workersPreferredZoneId || selectedRouteZoneId();
+}
+
+function normalizePreferredPattern(value) {
+  let pattern = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//i, "")
+    .split(/[?#]/)[0]
+    .replace(/^\/+/, "");
+
+  if (!pattern) {
+    return "";
+  }
+
+  if (!pattern.includes("/")) {
+    pattern = `${pattern}/*`;
+  } else if (pattern.endsWith("/")) {
+    pattern = `${pattern}*`;
+  }
+
+  return pattern;
+}
+
 function resetModalState() {
   state.workersModal = "";
   state.workersActiveName = "";
@@ -77,6 +103,9 @@ function resetModalState() {
   state.workersRoutesLoading = false;
   state.workersDeleteName = "";
   state.workersDeleteConfirm = "";
+  state.workersPreferredZoneId = "";
+  state.workersPreferredPattern = "";
+  state.workersPreferredHostname = "saas.sin.fan";
 }
 
 function validateWorkerName(name) {
@@ -187,6 +216,7 @@ export function createWorkersActions({ renderApp }) {
     state.workersRoutes = [];
     state.workersRouteZoneId = state.workersRouteZoneId || firstZoneId();
     state.workersDomainZoneId = state.workersDomainZoneId || firstZoneId();
+    state.workersPreferredZoneId = state.workersPreferredZoneId || state.workersRouteZoneId;
     state.workersNotice = "";
     renderApp();
 
@@ -301,6 +331,23 @@ export function createWorkersActions({ renderApp }) {
   function changeWorkerDomainZone(event) {
     state.workersDomainZoneId = String(event.target.value || "");
     renderApp();
+  }
+
+  function changeWorkerPreferredZone(event) {
+    const zoneId = String(event.target.value || "");
+    state.workersPreferredZoneId = zoneId;
+    state.workersRouteZoneId = zoneId || state.workersRouteZoneId;
+    renderApp();
+  }
+
+  function changeWorkerPreferredDraft(event) {
+    const field = String(event.target.name || "");
+
+    if (field === "pattern") {
+      state.workersPreferredPattern = event.target.value || "";
+    } else if (field === "preferredHostname") {
+      state.workersPreferredHostname = event.target.value || "";
+    }
   }
 
   async function submitWorkerBinding(event) {
@@ -470,6 +517,54 @@ export function createWorkersActions({ renderApp }) {
     }
   }
 
+  async function submitWorkerPreferredRoute(event) {
+    event.preventDefault();
+    const formData = readForm("#worker-preferred-route-form");
+    const zoneId = String(formData.get("zoneId") || selectedPreferredZoneId());
+    const rawPattern = String(formData.get("pattern") || "");
+    const rawPreferredHostname = String(formData.get("preferredHostname") || "");
+    const pattern = normalizePreferredPattern(rawPattern);
+    const preferredHostname = rawPreferredHostname.trim().toLowerCase();
+
+    state.workersPreferredPattern = rawPattern;
+    state.workersPreferredHostname = rawPreferredHostname;
+
+    if (!pattern) {
+      setNotice("访问域名不能为空");
+      renderApp();
+      return;
+    }
+
+    if (!preferredHostname) {
+      setNotice("优选域名不能为空");
+      renderApp();
+      return;
+    }
+
+    state.workersPendingKey = "preferred-route";
+    renderApp();
+
+    try {
+      const deployment = await createWorkerPreferredRoute(activeWorkerName(), {
+        zoneId,
+        zoneName: zoneName(zoneId),
+        pattern,
+        preferredHostname,
+      });
+      state.workersRouteZoneId = zoneId;
+      state.workersPreferredZoneId = zoneId;
+      state.workersPreferredPattern = "";
+      state.workersPreferredHostname = deployment.preferredHostname || preferredHostname;
+      setNotice(`Worker 优选已添加：${deployment.routePattern}，CNAME 指向 ${deployment.preferredHostname}`);
+      await loadWorkerRoutes({ render: false });
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      state.workersPendingKey = "";
+      renderApp();
+    }
+  }
+
   async function deleteWorkerRoute(routeId) {
     if (!routeId || !window.confirm("确定要删除这个路由吗？")) {
       return;
@@ -594,6 +689,8 @@ export function createWorkersActions({ renderApp }) {
 
   return {
     changeWorkerDomainZone,
+    changeWorkerPreferredDraft,
+    changeWorkerPreferredZone,
     changeWorkerRouteZone,
     changeWorkersAccount,
     changeWorkerTab,
@@ -613,6 +710,7 @@ export function createWorkersActions({ renderApp }) {
     submitWorkerBinding,
     submitWorkerSecret,
     submitWorkerSchedules,
+    submitWorkerPreferredRoute,
     submitWorkerRoute,
     submitWorkerScript,
     openWorkerTail,

@@ -115,6 +115,15 @@ export function bindEvents(actions) {
     .querySelector("#worker-domain-zone")
     ?.addEventListener("change", actions.changeWorkerDomainZone);
   document
+    .querySelector("#worker-preferred-zone")
+    ?.addEventListener("change", actions.changeWorkerPreferredZone);
+  document
+    .querySelector("#worker-preferred-route-form")
+    ?.addEventListener("submit", actions.submitWorkerPreferredRoute);
+  document
+    .querySelectorAll("#worker-preferred-route-form input")
+    .forEach((input) => input.addEventListener("input", actions.changeWorkerPreferredDraft));
+  document
     .querySelector("#worker-route-form")
     ?.addEventListener("submit", actions.submitWorkerRoute);
   document

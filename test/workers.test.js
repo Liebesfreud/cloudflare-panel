@@ -80,10 +80,20 @@ async function readRequestBody(request) {
   }
 }
 
-function createWorkersMock({ accountId, zoneId, requests }) {
+function createWorkersMock({ accountId, dnsRecords = [], zoneId, requests }) {
   const workerScript = `addEventListener('fetch', event => {
   event.respondWith(new Response('Hello from test'));
 });`;
+  const records = dnsRecords.map((record, index) => ({
+    id: record.id || `${String(index + 1).repeat(32)}`.slice(0, 32),
+    ttl: record.ttl ?? 1,
+    proxied: Boolean(record.proxied),
+    proxiable: true,
+    comment: record.comment || "",
+    created_on: "2026-01-01T00:00:00Z",
+    modified_on: "2026-01-01T00:00:00Z",
+    ...record,
+  }));
 
   return createServer(async (request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
@@ -293,11 +303,74 @@ function createWorkersMock({ accountId, zoneId, requests }) {
     }
 
     if (request.method === "POST" && url.pathname === `/zones/${zoneId}/workers/routes`) {
+      records.push({
+        id: `route-record-${records.length}`,
+        type: "ROUTE",
+        name: body.json.pattern,
+        content: body.json.script,
+      });
       makeJsonResponse(response, 200, {
         success: true,
         errors: [],
         messages: [],
         result: { id: "route-3", pattern: body.json.pattern, script: body.json.script },
+      });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === `/zones/${zoneId}/dns_records`) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: records.filter((record) => record.type !== "ROUTE"),
+        result_info: { page: 1, per_page: 100, total_pages: 1, total_count: records.length },
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === `/zones/${zoneId}/dns_records`) {
+      const record = {
+        id: "c".repeat(32),
+        ttl: body.json.ttl,
+        proxied: Boolean(body.json.proxied),
+        proxiable: true,
+        comment: body.json.comment || "",
+        created_on: "2026-01-01T00:00:00Z",
+        modified_on: "2026-01-01T00:00:00Z",
+        ...body.json,
+      };
+      records.push(record);
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: record,
+      });
+      return;
+    }
+
+    const dnsRecordMatch = url.pathname.match(
+      new RegExp(`^/zones/${zoneId}/dns_records/(?<recordId>[a-z0-9]{32})$`, "i")
+    );
+
+    if (request.method === "PATCH" && dnsRecordMatch) {
+      const record = records.find((item) => item.id === dnsRecordMatch.groups.recordId);
+
+      if (!record) {
+        makeJsonResponse(response, 404, {
+          success: false,
+          errors: [{ message: "dns record not found" }],
+        });
+        return;
+      }
+
+      Object.assign(record, body.json, { modified_on: "2026-01-02T00:00:00Z" });
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: record,
       });
       return;
     }
@@ -308,6 +381,16 @@ function createWorkersMock({ accountId, zoneId, requests }) {
         errors: [],
         messages: [],
         result: { id: "route-1" },
+      });
+      return;
+    }
+
+    if (request.method === "DELETE" && url.pathname === `/zones/${zoneId}/workers/routes/route-3`) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: { id: "route-3" },
       });
       return;
     }
@@ -418,6 +501,28 @@ test("manages Workers scripts, subdomain, routes, and custom domains through Clo
     assert.equal(routeCreatePayload.route.pattern, "admin.alpha.example/*");
     assert.equal(routeCreatePayload.route.script, "hello-worker");
 
+    const preferredResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/workers/hello-worker/preferred-route`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zoneId,
+          zoneName: "alpha.example",
+          pattern: "fangwen.alpha.example/*",
+          preferredHostname: "saas.sin.fan",
+        }),
+      }
+    );
+    const preferredPayload = await preferredResponse.json();
+    assert.equal(preferredResponse.status, 201);
+    assert.equal(preferredPayload.deployment.routePattern, "fangwen.alpha.example/*");
+    assert.equal(preferredPayload.deployment.route.script, "hello-worker");
+    assert.equal(preferredPayload.deployment.dnsRecord.type, "CNAME");
+    assert.equal(preferredPayload.deployment.dnsRecord.name, "fangwen.alpha.example");
+    assert.equal(preferredPayload.deployment.dnsRecord.content, "saas.sin.fan");
+    assert.equal(preferredPayload.deployment.dnsRecord.proxied, false);
+
     const domainCreateResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/workers/hello-worker/domains`,
       {
@@ -478,6 +583,10 @@ test("manages Workers scripts, subdomain, routes, and custom domains through Clo
         ["PUT", `/accounts/${accountId}/workers/scripts/hello-worker`],
         ["GET", `/zones/${zoneId}/workers/routes`],
         ["POST", `/zones/${zoneId}/workers/routes`],
+        ["GET", `/zones/${zoneId}/workers/routes`],
+        ["POST", `/zones/${zoneId}/workers/routes`],
+        ["GET", `/zones/${zoneId}/dns_records`],
+        ["POST", `/zones/${zoneId}/dns_records`],
         ["PUT", `/accounts/${accountId}/workers/domains`],
         ["POST", `/accounts/${accountId}/workers/scripts/hello-worker/subdomain`],
         ["DELETE", `/zones/${zoneId}/workers/routes/route-1`],
@@ -485,6 +594,69 @@ test("manages Workers scripts, subdomain, routes, and custom domains through Clo
         ["DELETE", `/accounts/${accountId}/workers/scripts/hello-worker`],
       ]
     );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
+test("adds Worker preferred route with DNS CNAME disabled proxy", async () => {
+  const accountId = "1".repeat(32);
+  const zoneId = "a".repeat(32);
+  const requests = [];
+  const cloudflareMock = createWorkersMock({ accountId, zoneId, requests });
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = 3232;
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "global-key",
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const response = await fetch(
+      `http://127.0.0.1:${panelPort}/api/workers/hello-worker/preferred-route`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zoneId,
+          zoneName: "alpha.example",
+          pattern: "fangwen.alpha.example/*",
+          preferredHostname: "saas.sin.fan",
+        }),
+      }
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(payload.deployment.accessHostname, "fangwen.alpha.example");
+    assert.equal(payload.deployment.preferredHostname, "saas.sin.fan");
+
+    const routeRequest = requests.find(
+      (request) =>
+        request.method === "POST" && request.path === `/zones/${zoneId}/workers/routes`
+    );
+    assert.deepEqual(routeRequest.body, {
+      pattern: "fangwen.alpha.example/*",
+      script: "hello-worker",
+    });
+
+    const dnsRequest = requests.find(
+      (request) =>
+        request.method === "POST" && request.path === `/zones/${zoneId}/dns_records`
+    );
+    assert.deepEqual(dnsRequest.body, {
+      type: "CNAME",
+      name: "fangwen.alpha.example",
+      content: "saas.sin.fan",
+      ttl: 1,
+      proxied: false,
+      comment: "Worker 优选域名",
+    });
   } finally {
     await panel.stop();
     cloudflareMock.close();
@@ -530,6 +702,128 @@ test("rejects Worker route patterns outside the selected zone", async () => {
           request.method === "POST" && request.path === `/zones/${zoneId}/workers/routes`
       ),
       false
+    );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
+test("rejects Worker preferred route outside the selected zone before Cloudflare writes", async () => {
+  const accountId = "1".repeat(32);
+  const zoneId = "a".repeat(32);
+  const requests = [];
+  const cloudflareMock = createWorkersMock({ accountId, zoneId, requests });
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = 3233;
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "global-key",
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const response = await fetch(
+      `http://127.0.0.1:${panelPort}/api/workers/hello-worker/preferred-route`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zoneId,
+          zoneName: "alpha.example",
+          pattern: "fangwen.other.example/*",
+          preferredHostname: "saas.sin.fan",
+        }),
+      }
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /必须属于所选区域 alpha\.example/);
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "POST" && request.path === `/zones/${zoneId}/workers/routes`
+      ),
+      false
+    );
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "POST" && request.path === `/zones/${zoneId}/dns_records`
+      ),
+      false
+    );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
+test("rolls back a newly created Worker preferred route when DNS conflicts", async () => {
+  const accountId = "1".repeat(32);
+  const zoneId = "a".repeat(32);
+  const requests = [];
+  const cloudflareMock = createWorkersMock({
+    accountId,
+    zoneId,
+    requests,
+    dnsRecords: [
+      {
+        id: "d".repeat(32),
+        type: "A",
+        name: "fangwen.alpha.example",
+        content: "192.0.2.1",
+        ttl: 1,
+      },
+    ],
+  });
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = 3234;
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "global-key",
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const response = await fetch(
+      `http://127.0.0.1:${panelPort}/api/workers/hello-worker/preferred-route`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zoneId,
+          zoneName: "alpha.example",
+          pattern: "fangwen.alpha.example/*",
+          preferredHostname: "saas.sin.fan",
+        }),
+      }
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.match(payload.error, /已存在 A 解析/);
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "POST" && request.path === `/zones/${zoneId}/workers/routes`
+      ),
+      true
+    );
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "DELETE" &&
+          request.path === `/zones/${zoneId}/workers/routes/route-3`
+      ),
+      true
     );
   } finally {
     await panel.stop();
@@ -598,6 +892,8 @@ test("renders Workers view with original-style modal text and compact domain man
   assert.match(app.innerHTML, /代码编辑/);
   assert.match(app.innerHTML, /域名管理/);
   assert.match(app.innerHTML, /Workers\.dev 子域/);
+  assert.match(app.innerHTML, /Worker 优选/);
+  assert.match(app.innerHTML, /saas\.sin\.fan/);
   assert.match(app.innerHTML, /路由模式/);
   assert.match(app.innerHTML, /自定义域/);
   assert.match(app.innerHTML, /KV_CACHE/);

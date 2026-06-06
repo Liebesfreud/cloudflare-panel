@@ -3271,3 +3271,37 @@ node --test test/smoke.test.js
 
 - README 明确所有修改 SQLite 的操作前要先备份。
 - 未提供直接手工写入加密字段的教程，避免用户绕过 AES-GCM 密钥处理导致 Cloudflare Global API Key 或 2FA seed 损坏。
+
+## 2026-06-07 Worker 优选路由
+
+用户要求在 Workers 里增加“优选”流程：添加访问域名，使用路由模式 `fangwen.100222.xyz/*`，并在 DNS 解析里添加 `CNAME fangwen.100222.xyz -> saas.sin.fan` 这类优选域名。
+
+本次变更：
+
+- 后端新增组合接口：
+  - `POST /api/workers/:scriptName/preferred-route`
+  - 入参：`zoneId`、`zoneName`、`pattern` 或 `accessHostname`、`preferredHostname`。
+  - 服务端规范化路由模式为“访问域名 + /*”，校验访问域名必须属于所选 zone。
+  - 先创建或复用 Worker 路由，再 upsert DNS CNAME。
+  - DNS CNAME 固定 `ttl: 1`、`proxied: false`、`comment: "Worker 优选域名"`，即访问域名指向优选域名时不开小黄云。
+  - 如果 DNS 写入失败且本次新建了路由，会尝试删除刚创建的路由，避免半完成配置。
+- DNS 服务新增 `upsertCnameRecord`：
+  - 同名 CNAME 存在时更新 content、TTL、proxied、comment。
+  - 同名 A/AAAA/TXT/MX/NS 等其它记录存在时返回 409，提示先清理解析。
+  - 多条同名 CNAME 时返回 409，避免覆盖不确定目标。
+- 前端 Workers 域名管理页新增“Worker 优选”面板：
+  - 域名区域选择。
+  - 访问域名输入，提交时自动补 `/*`。
+  - 优选域名输入，默认 `saas.sin.fan`。
+  - 保持 Workers 页面原来的紧凑字体和 12px 表单控件。
+- 操作历史：
+  - 新接口以 `/api/workers` 开头，继续归入 `Workers` 模块记录。
+
+测试：
+
+- `test/workers.test.js` 增加覆盖：
+  - 成功添加 Worker 优选，断言 Cloudflare mock 收到 route body `{ pattern, script }`。
+  - 成功添加 DNS CNAME，断言 body 包含 `proxied: false` 和 `comment: "Worker 优选域名"`。
+  - 访问域名不属于所选 zone 时返回 400，且不写 Cloudflare route/DNS。
+  - DNS 同名 A 记录冲突时返回 409，并回滚新建路由。
+  - 前端 Workers 渲染测试断言出现 `Worker 优选` 和 `saas.sin.fan`。

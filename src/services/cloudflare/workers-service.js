@@ -4,6 +4,7 @@ import { assertCloudflareId, assertCloudflareResourceId } from "./cloudflare-id.
 const workerNamePattern = /^[a-z0-9-]+$/;
 const bindingNamePattern = /^[A-Z][A-Z0-9_]{0,63}$/;
 const maxWorkerScriptBytes = 1024 * 1024;
+const preferredRouteComment = "Worker 优选域名";
 
 export const defaultWorkerScript = `addEventListener('fetch', event => {
   event.respondWith(new Response('Hello World!'));
@@ -375,9 +376,61 @@ function normalizeZoneScopedHostname(value, zoneName, { allowPath = false } = {}
   return `${host}${path}`;
 }
 
+function normalizeHostname(value, label) {
+  const hostname = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/g, "");
+
+  if (!hostname) {
+    throw new HttpError(400, `请输入${label}`);
+  }
+
+  if (hostname.length > 253) {
+    throw new HttpError(400, `${label}长度不能超过 253 个字符`);
+  }
+
+  if (
+    hostname.includes("://") ||
+    hostname.includes("/") ||
+    hostname.startsWith(".") ||
+    !hostname.includes(".")
+  ) {
+    throw new HttpError(400, `${label}格式无效，请填写域名而不是 URL`);
+  }
+
+  const labels = hostname.split(".");
+  const valid = labels.every(
+    (item) =>
+      item.length >= 1 &&
+      item.length <= 63 &&
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(item)
+  );
+
+  if (!valid) {
+    throw new HttpError(400, `${label}格式无效`);
+  }
+
+  return hostname;
+}
+
+function splitRoutePattern(pattern) {
+  const slashIndex = pattern.indexOf("/");
+
+  if (slashIndex < 0) {
+    return { hostname: pattern, path: "/*" };
+  }
+
+  return {
+    hostname: pattern.slice(0, slashIndex),
+    path: pattern.slice(slashIndex),
+  };
+}
+
 export class WorkersService {
-  constructor({ cloudflareClient, perPage = 50 }) {
+  constructor({ cloudflareClient, dnsRecordsService, perPage = 50 }) {
     this.cloudflareClient = cloudflareClient;
+    this.dnsRecordsService = dnsRecordsService;
     this.perPage = perPage;
   }
 
@@ -757,6 +810,72 @@ export class WorkersService {
     });
 
     return normalizeRoute(payload.result || {});
+  }
+
+  async createPreferredRoute(zoneId, input = {}) {
+    assertCloudflareId(zoneId, "区域 ID");
+
+    if (!this.dnsRecordsService) {
+      throw new HttpError(500, "DNS 记录服务未初始化，无法添加 Worker 优选");
+    }
+
+    const workerName = assertWorkerName(input.scriptName);
+    const zoneName = await this.getZoneName(zoneId, input.zoneName);
+    const pattern = normalizeZoneScopedHostname(input.pattern || input.accessHostname, zoneName, {
+      allowPath: true,
+    });
+    const { hostname: accessHostname, path } = splitRoutePattern(pattern);
+    const preferredHostname = normalizeHostname(input.preferredHostname, "优选域名");
+
+    if (path !== "/*") {
+      throw new HttpError(400, "Worker 优选路由模式必须是访问域名 + /*");
+    }
+
+    const existingRoute = (await this.listRoutes(zoneId)).find(
+      (route) => route.pattern === pattern
+    );
+
+    if (existingRoute && existingRoute.script !== workerName) {
+      throw new HttpError(
+        409,
+        `${pattern} 已绑定到 Worker ${existingRoute.script || "unknown"}，请先删除原路由`
+      );
+    }
+
+    const route =
+      existingRoute ||
+      (await this.createRoute(zoneId, {
+        pattern,
+        scriptName: workerName,
+        zoneName,
+      }));
+    let dnsRecord;
+
+    try {
+      dnsRecord = await this.dnsRecordsService.upsertCnameRecord(zoneId, {
+        name: accessHostname,
+        content: preferredHostname,
+        ttl: 1,
+        proxied: false,
+        comment: preferredRouteComment,
+      });
+    } catch (error) {
+      if (!existingRoute && route?.id) {
+        await this.deleteRoute(zoneId, route.id).catch(() => null);
+      }
+
+      throw error;
+    }
+
+    return {
+      accessHostname,
+      dnsRecord,
+      preferredHostname,
+      route,
+      routePattern: pattern,
+      zoneId,
+      zoneName,
+    };
   }
 
   async deleteRoute(zoneId, routeId) {

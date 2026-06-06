@@ -206,6 +206,17 @@ function matchRoute(method, pathname) {
     };
   }
 
+  const workersPreferredRouteMatch = pathname.match(
+    /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/preferred-route$/i
+  );
+
+  if (workersPreferredRouteMatch) {
+    return {
+      key: `${method} /api/workers/:scriptName/preferred-route`,
+      params: workersPreferredRouteMatch.groups,
+    };
+  }
+
   const workersDomainMatch = pathname.match(
     /^\/api\/workers\/(?<scriptName>[a-z0-9-]{1,63})\/domains\/(?<domainId>[a-z0-9_-]{1,128})$/i
   );
@@ -642,6 +653,7 @@ export function createApiRouter({
     ["POST /api/workers/:scriptName/tail", workersController.createTail],
     ["GET /api/workers/:scriptName/routes", workersController.listRoutes],
     ["POST /api/workers/:scriptName/routes", workersController.createRoute],
+    ["POST /api/workers/:scriptName/preferred-route", workersController.createPreferredRoute],
     ["DELETE /api/workers/:scriptName/routes/:routeId", workersController.deleteRoute],
     ["GET /api/workers/:scriptName/domains", workersController.listDomains],
     ["PUT /api/workers/:scriptName/domains", workersController.createDomain],

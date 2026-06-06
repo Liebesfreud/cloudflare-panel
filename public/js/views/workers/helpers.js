@@ -21,6 +21,10 @@ export function activeDomainZoneId() {
   return state.workersDomainZoneId || state.zones[0]?.id || "";
 }
 
+export function activePreferredZoneId() {
+  return state.workersPreferredZoneId || activeRouteZoneId();
+}
+
 export function findZone(zoneId) {
   return state.zones.find((zone) => zone.id === zoneId) || state.zones[0] || null;
 }

@@ -86,6 +86,10 @@ function normalizeRecordInput(input, { partial = false } = {}) {
   return record;
 }
 
+function sameDnsValue(left, right) {
+  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
+}
+
 export class DnsRecordsService {
   constructor({ cloudflareClient, perPage = 100 }) {
     this.cloudflareClient = cloudflareClient;
@@ -152,6 +156,53 @@ export class DnsRecordsService {
     }
 
     return records;
+  }
+
+  async upsertCnameRecord(zoneId, input = {}) {
+    assertCloudflareId(zoneId, "区域 ID");
+    const recordBody = normalizeRecordInput({
+      ttl: 1,
+      proxied: false,
+      ...input,
+      type: "CNAME",
+    });
+    const records = await this.listRecords(zoneId);
+    const existingRecords = records.filter((record) => record.name === recordBody.name);
+    const blockingRecords = existingRecords.filter((record) => record.type !== "CNAME");
+
+    if (blockingRecords.length > 0) {
+      const types = [...new Set(blockingRecords.map((record) => record.type).filter(Boolean))]
+        .join("、");
+
+      throw new HttpError(
+        409,
+        `${recordBody.name} 已存在 ${types || "其它"} 解析，请先清理后再添加 Worker 优选`
+      );
+    }
+
+    if (existingRecords.length > 1) {
+      throw new HttpError(
+        409,
+        `${recordBody.name} 存在多条 CNAME 解析，请先保留一条后再添加 Worker 优选`
+      );
+    }
+
+    if (existingRecords.length === 1) {
+      const [record] = existingRecords;
+
+      if (
+        sameDnsValue(record.content, recordBody.content) &&
+        record.ttl === recordBody.ttl &&
+        record.proxied === false &&
+        sameDnsValue(record.comment, recordBody.comment)
+      ) {
+        return record;
+      }
+
+      return this.updateRecord(zoneId, record.id, recordBody);
+    }
+
+    return this.createRecord(zoneId, recordBody);
   }
 
   async updateRecord(zoneId, recordId, input) {

@@ -146,6 +146,20 @@ export class WorkersController {
     return { statusCode: 201, body: { route } };
   };
 
+  createPreferredRoute = async ({ request, params }) => {
+    const body = await readJsonBody(request);
+
+    if (!body.zoneId) {
+      throw new HttpError(400, "缺少区域 ID");
+    }
+
+    const deployment = await this.workersService.createPreferredRoute(body.zoneId, {
+      ...body,
+      scriptName: params.scriptName,
+    });
+    return { statusCode: 201, body: { deployment } };
+  };
+
   deleteRoute = async ({ params, url }) => {
     const zoneId = url.searchParams.get("zoneId");
 

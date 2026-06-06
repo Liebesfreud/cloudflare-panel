@@ -92,6 +92,7 @@ export function createContainer(config) {
   });
   const workersService = new WorkersService({
     cloudflareClient,
+    dnsRecordsService,
   });
   const credentialSessionService = new CredentialSessionService({
     secureCookies: config.server.secureCookies,
