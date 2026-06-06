@@ -165,6 +165,8 @@ PORT=3000 npm start
 - `DOCKERHUB_TOKEN`：Docker Hub Access Token，建议不要使用网页登录密码。
 - `DOCKERHUB_REPOSITORY`：可选，完整镜像名，例如 `baize233/network`。不填时默认使用 `DOCKERHUB_USERNAME/当前仓库名`。
 
+未配置 `DOCKERHUB_USERNAME` 或 `DOCKERHUB_TOKEN` 时，Docker workflow 仍会运行测试和镜像构建验证，但会跳过 Docker Hub 登录和推送，并在 Actions 中输出 warning。配置 secrets 后，下一次推送会自动上传镜像。
+
 推送成功后会生成这些标签：
 
 - `latest`：`main` 分支最新镜像。

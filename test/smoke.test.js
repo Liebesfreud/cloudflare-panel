@@ -359,7 +359,7 @@ test("creates a Cloudflare zone from the add-domain endpoint", async () => {
   });
 
   const mockUrl = await listen(cloudflareMock);
-  const panelPort = 3220;
+  const panelPort = 3250;
   const panel = startPanel({
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "admin@example.com",

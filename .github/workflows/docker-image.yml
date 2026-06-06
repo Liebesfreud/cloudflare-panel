@@ -45,8 +45,10 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required." >&2
-            exit 1
+            echo "::warning::DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are not configured. The workflow will build the image but skip Docker Hub push."
+            echo "push=false" >> "${GITHUB_OUTPUT}"
+            echo "image=local/cloudflare-preferred-panel" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
           image="${DOCKERHUB_REPOSITORY}"
@@ -56,8 +58,10 @@ jobs:
 
           image="$(printf '%s' "${image}" | tr '[:upper:]' '[:lower:]')"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "push=true" >> "${GITHUB_OUTPUT}"
 
       - name: Login to Docker Hub
+        if: ${{ steps.image.outputs.push == 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -77,7 +81,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ steps.image.outputs.push == 'true' }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

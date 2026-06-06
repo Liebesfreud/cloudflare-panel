@@ -285,7 +285,7 @@ test("deploys one-click acceleration through Cloudflare SaaS APIs", async () => 
     ],
   });
   const mockUrl = await listen(cloudflareMock.server);
-  const panelPort = 3220;
+  const panelPort = 3260;
   const panel = startPanel({
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "admin@example.com",
