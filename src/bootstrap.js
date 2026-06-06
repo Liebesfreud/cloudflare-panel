@@ -37,6 +37,8 @@ import { createApp } from "./app.js";
 
 export function createContainer(config) {
   const persistentSecretService = new PersistentSecretService({
+    externalSecret: config.database.secretKey,
+    externalSecretPath: config.database.secretKeyFile,
     secretPath: config.database.secretPath,
   });
   const sqliteStore = new SqliteStore({
@@ -93,6 +95,7 @@ export function createContainer(config) {
   });
   const credentialSessionService = new CredentialSessionService({
     secureCookies: config.server.secureCookies,
+    trustProxyHeaders: config.server.trustProxyHeaders,
     ttlDays: config.session.ttlDays,
   });
   const operationHistoryService = new OperationHistoryService();
@@ -101,6 +104,7 @@ export function createContainer(config) {
   });
   const setupGuardService = new SetupGuardService({
     token: config.security.setupToken,
+    tokenPath: config.security.setupTokenPath,
   });
   const authRateLimiter = new RateLimiterService({
     limit: config.security.rateLimitAttempts,
@@ -122,6 +126,7 @@ export function createContainer(config) {
   });
   const developerResourcesController = new DeveloperResourcesController({
     developerResourcesService,
+    d1SqlConsoleAllowMutations: config.features.d1SqlConsoleAllowMutations,
     d1SqlConsoleEnabled: config.features.d1SqlConsoleEnabled,
   });
   const firewallRulesController = new FirewallRulesController({ firewallRulesService });
@@ -150,9 +155,11 @@ export function createContainer(config) {
       operationHistoryService,
       pageRulesController,
       panelAuthService,
+      publicOrigin: config.server.publicOrigin,
       setupGuardService,
       speedDeployController,
       sslSettingsController,
+      trustProxyHeaders: config.server.trustProxyHeaders,
       workersController,
       zonesController,
     }),

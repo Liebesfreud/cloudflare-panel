@@ -3195,3 +3195,56 @@ node --test test/smoke.test.js
 - `gh api repos/baize-projects/network/pages` 删除前确认 Pages source 为 `pages` 分支。
 - `git push origin --delete pages` 删除远端分支成功。
 - 后续应通过 `git ls-remote --heads origin` 确认远端只剩 `main`。
+
+## 2026-06-06 安全加固补丁：Node 24、初始化口令、D1 SQL、反代同源和密钥分离
+
+用户继续指出上线风险：GitHub Actions 仍提示 Node 20 actions deprecation、首次初始化 token 完整写入日志、`/api/setup/secret` 没有限速、D1 SQL 控制台开启后等价于任意 SQL、同源校验依赖未受控的代理头、`/data/secret.key` 和 SQLite 同时泄露会解密敏感字段。本轮按 Docker-only 部署口径继续加固。
+
+本次变更：
+
+- Node 24：
+  - Dockerfile 已使用 `node:24-alpine`。
+  - `.github/workflows/docker-image.yml` 已使用 `actions/setup-node@v4` 的 `node-version: "24"`。
+  - 新增 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`，要求 GitHub JS actions 运行时切到 Node 24，消除 Node 20 deprecation warning。
+- 初始化口令：
+  - `src/server.js` 不再打印完整 setup token，只输出掩码和读取提示。
+  - 自动生成的 setup token 写入 `SETUP_TOKEN_PATH`，默认 `/data/setup-token.txt`，文件权限 `0600`。
+  - 如果显式配置 `SETUP_TOKEN`，不生成 token 文件，日志只提示使用配置值。
+  - 管理员初始化成功后，自动删除生成的 setup token 文件。
+- `/api/setup/secret` 限速：
+  - `src/controllers/credentials-controller.js` 在暴露 TOTP seed 前先按 `setup-secret:<remoteAddress>` 调用 rate limiter。
+  - 连续错误 token 请求会返回 429，即使后续带正确 token 也要等待窗口恢复。
+- D1 SQL 控制台：
+  - D1 是面板管理 Cloudflare 资源的功能，不是本项目自身部署或数据存储方式；本项目自身仍是 Docker + SQLite。
+  - `ENABLE_D1_SQL_CONSOLE=false` 时继续完全关闭手写 SQL。
+  - `ENABLE_D1_SQL_CONSOLE=true` 时默认只允许单条 `SELECT/WITH` 查询。
+  - 只有额外设置 `ENABLE_D1_SQL_MUTATIONS=true`，才允许写入、DDL 等 mutation SQL。
+  - `src/lib/sql-safety.js` 做单条语句和只读前缀校验；controller 和 service 双层校验，避免未来内部调用绕过 HTTP controller。
+- 反向代理同源校验：
+  - 新增 `src/lib/request-origin.js`。
+  - `PUBLIC_ORIGIN` 可显式固定生产源站，优先级最高。
+  - 默认不信任 `X-Forwarded-Proto`；只有 `TRUST_PROXY_HEADERS=true` 时才使用该代理头。
+  - `src/services/credential-session-service.js` 的 Secure Cookie 判断也接入同一个 `TRUST_PROXY_HEADERS` 边界。
+- SQLite 加密密钥分离：
+  - `src/services/persistent-secret-service.js` 支持 `PANEL_SECRET_KEY_FILE` 和 `PANEL_SECRET_KEY`。
+  - 生产推荐用 Docker secret 或独立只读挂载提供密钥材料，使数据库和密钥分开备份/授权。
+  - 默认仍兼容 `/data/secret.key` 零配置单容器部署。
+- 文档：
+  - `.env.example`、`README.md`、`DEPLOYMENT.md` 更新新开关、初始化 token 读取方式、D1 两级开关、反代源站配置和密钥分离建议。
+
+测试：
+
+- 新增/更新测试覆盖：
+  - 启动日志不包含完整 setup token。
+  - 自动生成的 setup token 写入文件且权限为 `0600`，初始化后可删除。
+  - `/api/setup/secret` 连续失败后限速返回 429。
+  - 同源校验默认不信任 `X-Forwarded-Proto`，显式 `TRUST_PROXY_HEADERS=true` 或 `PUBLIC_ORIGIN` 后按配置判断。
+  - D1 SQL 控制台开启后默认只读，mutation SQL 不会发到 Cloudflare mock。
+  - `ENABLE_D1_SQL_MUTATIONS=true` 后才允许 mutation SQL。
+  - `PANEL_SECRET_KEY_FILE` 可从 `/data` 外读取加密密钥材料。
+
+安全边界：
+
+- 初始化 token 不再完整进入日志，但 `/data/setup-token.txt` 在首次初始化前仍是高敏感文件；不要把未初始化容器公开暴露给不可信用户。
+- `PANEL_SECRET_KEY` 是敏感环境变量，仅建议临时或受控环境使用；生产更推荐 `PANEL_SECRET_KEY_FILE`。
+- D1 mutation 开关只适合临时维护窗口；开启后，已登录面板用户对 Cloudflare D1 拥有任意 SQL 能力。

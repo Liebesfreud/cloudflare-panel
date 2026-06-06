@@ -13,9 +13,13 @@ export function startServer({ config = createConfig(), logger = console } = {}) 
 
     logger.log(`Cloudflare preferred panel listening on http://127.0.0.1:${port}`);
     if (panelAuthService.getSetupState().setupRequired) {
-      logger.log(
-        `Initial setup token: ${setupGuardService.token} (required only before first setup)`
-      );
+      const wroteTokenFile = setupGuardService.persistForInitialSetup();
+      const tokenSource = wroteTokenFile
+        ? `read it inside the container from ${setupGuardService.tokenPath}`
+        : "use the SETUP_TOKEN value configured for this container";
+
+      logger.log(`Initial setup token is required before first setup: ${setupGuardService.mask()}`);
+      logger.log(`Initial setup token is not printed in full; ${tokenSource}.`);
     }
   });
 

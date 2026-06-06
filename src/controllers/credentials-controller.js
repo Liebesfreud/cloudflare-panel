@@ -65,6 +65,7 @@ export class CredentialsController {
   setupSecret = async ({ request }) => {
     const setupState = this.panelAuthService.getSetupState();
     const body = await readJsonBody(request);
+    const rateLimit = this.checkRateLimit(request, "setup-secret");
 
     if (!setupState.setupRequired || !setupState.panelUserRequired) {
       return {
@@ -73,13 +74,18 @@ export class CredentialsController {
       };
     }
 
+    if (!rateLimit.allowed) {
+      return rateLimit.response;
+    }
+
     if (!this.setupGuardService.verify(body.setupToken)) {
       return {
         statusCode: 401,
-        body: { error: "初始化口令错误，请查看容器启动日志。" },
+        body: { error: "初始化口令错误，请查看容器启动提示或 /data/setup-token.txt。" },
       };
     }
 
+    this.resetRateLimit(request, "setup-secret");
     const secret = generateTotpSecret();
 
     return {
@@ -106,7 +112,7 @@ export class CredentialsController {
     if (!this.setupGuardService.verify(body.setupToken)) {
       return {
         statusCode: 401,
-        body: { error: "初始化口令错误，请查看容器启动日志。" },
+        body: { error: "初始化口令错误，请查看容器启动提示或 /data/setup-token.txt。" },
       };
     }
 
@@ -127,6 +133,7 @@ export class CredentialsController {
       };
     }
 
+    this.setupGuardService.cleanupInitialSetupToken();
     this.resetRateLimit(request, "setup");
     const selectedAccountId = result.cloudflareAccount?.id || "";
     const session = this.credentialSessionService.create({
@@ -167,7 +174,7 @@ export class CredentialsController {
     if (!this.setupGuardService.verify(body.setupToken)) {
       return {
         statusCode: 401,
-        body: { error: "初始化口令错误，请查看容器启动日志。" },
+        body: { error: "初始化口令错误，请查看容器启动提示或 /data/setup-token.txt。" },
       };
     }
 
@@ -185,6 +192,7 @@ export class CredentialsController {
       };
     }
 
+    this.setupGuardService.cleanupInitialSetupToken();
     this.resetRateLimit(request, "setup");
     const session = this.credentialSessionService.create({
       authenticated: true,

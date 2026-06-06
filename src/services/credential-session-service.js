@@ -60,6 +60,7 @@ export class CredentialSessionService {
     now = () => Date.now(),
     secureCookies = false,
     ttlDays = defaultTtlDays,
+    trustProxyHeaders = false,
   } = {}) {
     this.cookieName = cookieName;
     this.maxAgeDays = normalizeTtlDays(ttlDays);
@@ -67,6 +68,7 @@ export class CredentialSessionService {
     this.now = now;
     this.secureCookies = Boolean(secureCookies);
     this.sessions = new Map();
+    this.trustProxyHeaders = Boolean(trustProxyHeaders);
   }
 
   create({ activeCloudflareAccountId = "", authenticated = false, email = "", globalApiKey = "", source = "browser" }) {
@@ -199,6 +201,10 @@ export class CredentialSessionService {
   }
 
   shouldUseSecureCookie(request) {
+    if (!this.trustProxyHeaders) {
+      return this.secureCookies;
+    }
+
     const forwardedProto = String(request?.headers?.["x-forwarded-proto"] || "")
       .split(",")[0]
       .trim()

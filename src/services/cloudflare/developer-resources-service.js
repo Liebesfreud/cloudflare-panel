@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { HttpError } from "../../lib/http-error.js";
+import { assertD1SqlAllowed } from "../../lib/sql-safety.js";
 import { assertCloudflareId, assertCloudflareResourceId } from "./cloudflare-id.js";
 
 const resourceTypes = new Set(["pages", "d1", "r2", "kv", "tunnels"]);
@@ -601,11 +602,11 @@ export class DeveloperResourcesService {
     return normalizeD1Database(payload.result || {});
   }
 
-  async queryD1(accountId = "", databaseId = "", input = {}) {
-    return this.executeD1Query(accountId, databaseId, input);
+  async queryD1(accountId = "", databaseId = "", input = {}, options = {}) {
+    return this.executeD1Query(accountId, databaseId, input, options);
   }
 
-  async executeD1Query(accountId = "", databaseId = "", input = {}) {
+  async executeD1Query(accountId = "", databaseId = "", input = {}, options = {}) {
     const resolved = await this.resolveAccountId(accountId);
     assertCloudflareResourceId(databaseId, "D1 数据库 ID");
     const sql = String(input.sql || "").trim();
@@ -613,6 +614,8 @@ export class DeveloperResourcesService {
     if (!sql || sql.length > 10000) {
       throw new HttpError(400, "SQL 不能为空，且长度不能超过 10000");
     }
+
+    assertD1SqlAllowed(sql, { allowMutations: Boolean(options.allowMutations) });
 
     const payload = await this.cloudflareClient.post(
       `accounts/${resolved.accountId}/d1/database/${databaseId}/query`,

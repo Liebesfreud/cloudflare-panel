@@ -176,6 +176,22 @@ function createDeveloperResourcesMock({ accountId, requests }) {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === `/accounts/${accountId}/d1/database/d1-database-id/query`) {
+      makeJsonResponse(response, 200, {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [
+          {
+            success: true,
+            results: [{ sql: body.sql }],
+            meta: { rows_read: 1, rows_written: 0 },
+          },
+        ],
+      });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === `/accounts/${accountId}/r2/buckets`) {
       makeJsonResponse(response, 200, {
         success: true,
@@ -419,4 +435,133 @@ test("renders developer resource pages and Worker template library", async () =>
   assert.match(app.innerHTML, /Hello World/);
   assert.match(app.innerHTML, /自定义模板/);
   assert.match(app.innerHTML, /使用模板/);
+});
+
+test("D1 SQL console defaults to read-only statements when enabled", async () => {
+  const accountId = "1".repeat(32);
+  const requests = [];
+  const cloudflareMock = createDeveloperResourcesMock({ accountId, requests });
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "test-key",
+    ENABLE_D1_SQL_CONSOLE: "true",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const readResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/developer-resources/d1/d1-database-id/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "SELECT 42 AS answer" }),
+      }
+    );
+    const readPayload = await readResponse.json();
+    const writeResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/developer-resources/d1/d1-database-id/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "DROP TABLE users" }),
+      }
+    );
+    const writePayload = await writeResponse.json();
+    const writableCteResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/developer-resources/d1/d1-database-id/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sql: "WITH removed AS (DELETE FROM users RETURNING id) SELECT * FROM removed",
+        }),
+      }
+    );
+    const writableCtePayload = await writableCteResponse.json();
+
+    assert.equal(readResponse.status, 200);
+    assert.equal(readPayload.result.results[0].results[0].sql, "SELECT 42 AS answer");
+    assert.equal(writeResponse.status, 403);
+    assert.match(writePayload.error, /默认只允许/);
+    assert.equal(writableCteResponse.status, 403);
+    assert.match(writableCtePayload.error, /默认只允许/);
+    assert.ok(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === `/accounts/${accountId}/d1/database/d1-database-id/query` &&
+          request.body.sql === "SELECT 42 AS answer"
+      )
+    );
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === `/accounts/${accountId}/d1/database/d1-database-id/query` &&
+          request.body.sql === "DROP TABLE users"
+      ),
+      false
+    );
+    assert.equal(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === `/accounts/${accountId}/d1/database/d1-database-id/query` &&
+          String(request.body.sql || "").includes("DELETE FROM users")
+      ),
+      false
+    );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
+test("D1 SQL mutations require the explicit mutation switch", async () => {
+  const accountId = "1".repeat(32);
+  const requests = [];
+  const cloudflareMock = createDeveloperResourcesMock({ accountId, requests });
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "test-key",
+    ENABLE_D1_SQL_CONSOLE: "true",
+    ENABLE_D1_SQL_MUTATIONS: "true",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const response = await fetch(
+      `http://127.0.0.1:${panelPort}/api/developer-resources/d1/d1-database-id/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "DROP TABLE users" }),
+      }
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.result.results[0].results[0].sql, "DROP TABLE users");
+    assert.ok(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === `/accounts/${accountId}/d1/database/d1-database-id/query` &&
+          request.body.sql === "DROP TABLE users"
+      )
+    );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
 });

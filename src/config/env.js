@@ -18,11 +18,15 @@ export function createConfig(env = process.env) {
   return {
     database: {
       path: env.SQLITE_PATH || join(dataDir, "panel.sqlite"),
+      secretKey: env.PANEL_SECRET_KEY || "",
+      secretKeyFile: env.PANEL_SECRET_KEY_FILE || "",
       secretPath: env.SECRET_KEY_PATH || join(dataDir, "secret.key"),
     },
     server: {
       port: parsePort(env.PORT, 3000),
+      publicOrigin: env.PUBLIC_ORIGIN || "",
       secureCookies: env.NODE_ENV === "production" || env.SECURE_COOKIES === "true",
+      trustProxyHeaders: env.TRUST_PROXY_HEADERS === "true",
     },
     cloudflare: {
       apiBaseUrl: env.CLOUDFLARE_API_BASE_URL || "https://api.cloudflare.com/client/v4",
@@ -30,12 +34,14 @@ export function createConfig(env = process.env) {
       zonesPerPage: 50,
     },
     features: {
+      d1SqlConsoleAllowMutations: env.ENABLE_D1_SQL_MUTATIONS === "true",
       d1SqlConsoleEnabled: env.ENABLE_D1_SQL_CONSOLE === "true",
     },
     security: {
       rateLimitAttempts: parsePositiveNumber(env.RATE_LIMIT_ATTEMPTS, 8),
       rateLimitWindowMs: parsePositiveNumber(env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
       setupToken: env.SETUP_TOKEN || "",
+      setupTokenPath: env.SETUP_TOKEN_PATH || join(dataDir, "setup-token.txt"),
     },
     session: {
       ttlDays: parsePositiveNumber(env.SESSION_TTL_DAYS, 30),

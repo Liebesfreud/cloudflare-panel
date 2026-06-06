@@ -1,3 +1,5 @@
+import { sameOriginRequest } from "../lib/request-origin.js";
+
 function matchRoute(method, pathname) {
   const cloudflareAccountSelectMatch = pathname.match(
     /^\/api\/session\/cloudflare-accounts\/(?<accountId>[a-z0-9_-]{1,96})\/select$/i
@@ -544,40 +546,6 @@ const csrfExemptRoutes = new Set([
 
 const stateChangingMethods = new Set(["DELETE", "PATCH", "POST", "PUT"]);
 
-function requestOrigin(request) {
-  const host = String(request?.headers?.host || "").trim();
-
-  if (!host) {
-    return "";
-  }
-
-  const proto = String(request?.headers?.["x-forwarded-proto"] || "")
-    .split(",")[0]
-    .trim() || "http";
-
-  return `${proto}://${host}`;
-}
-
-function sameOriginRequest(request) {
-  const expectedOrigin = requestOrigin(request);
-  const origin = String(request?.headers?.origin || "").trim();
-  const referer = String(request?.headers?.referer || "").trim();
-
-  if (origin) {
-    return origin === expectedOrigin;
-  }
-
-  if (referer) {
-    try {
-      return new URL(referer).origin === expectedOrigin;
-    } catch {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 export function createApiRouter({
   analyticsController,
   automationController,
@@ -594,8 +562,10 @@ export function createApiRouter({
   operationHistoryService,
   pageRulesController,
   panelAuthService,
+  publicOrigin = "",
   speedDeployController,
   sslSettingsController,
+  trustProxyHeaders = false,
   workersController,
   zonesController,
 }) {
@@ -789,7 +759,10 @@ export function createApiRouter({
             };
           }
 
-          if (stateChangingMethods.has(context.request.method) && !sameOriginRequest(context.request)) {
+          if (
+            stateChangingMethods.has(context.request.method) &&
+            !sameOriginRequest(context.request, { publicOrigin, trustProxyHeaders })
+          ) {
             return {
               statusCode: 403,
               body: { error: "请求来源校验失败。" },

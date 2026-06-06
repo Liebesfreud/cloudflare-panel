@@ -19,8 +19,10 @@ export function createApp({
   operationHistoryService,
   pageRulesController,
   panelAuthService,
+  publicOrigin = "",
   speedDeployController,
   sslSettingsController,
+  trustProxyHeaders = false,
   workersController,
   zonesController,
 }) {
@@ -40,8 +42,10 @@ export function createApp({
     operationHistoryService,
     pageRulesController,
     panelAuthService,
+    publicOrigin,
     speedDeployController,
     sslSettingsController,
+    trustProxyHeaders,
     workersController,
     zonesController,
   });

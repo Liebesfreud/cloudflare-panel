@@ -332,7 +332,7 @@ function renderD1Detail(detail) {
 
   return `
     <div class="devres-notice">
-      D1 SQL 控制台默认关闭；需要时由部署者设置 ENABLE_D1_SQL_CONSOLE=true 后再执行任意 SQL。
+      D1 SQL 控制台默认关闭；开启 ENABLE_D1_SQL_CONSOLE=true 后默认只允许单条 SELECT/WITH 查询。
     </div>
     <form class="devres-detail-form" id="d1-query-form">
       <label class="devres-field">

@@ -1,10 +1,15 @@
 import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { createConfig } from "../src/config/env.js";
+import { startServer } from "../src/server.js";
 import {
   allocatePanelPort,
   preparePanelTestEnvironment,
@@ -296,6 +301,37 @@ test("requires first-run setup before Cloudflare APIs are available", async () =
   }
 });
 
+test("generated first-run setup token is stored in a local file and not printed in full", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cf-panel-setup-token-"));
+  const messages = [];
+  const server = startServer({
+    config: createConfig({
+      DATA_DIR: dir,
+      PORT: "0",
+      SQLITE_PATH: join(dir, "panel.sqlite"),
+    }),
+    logger: {
+      log(message) {
+        messages.push(String(message));
+      },
+    },
+  });
+
+  try {
+    await once(server, "listening");
+    const token = (await readFile(join(dir, "setup-token.txt"), "utf8")).trim();
+    const output = messages.join("\n");
+
+    assert.match(token, /^[A-Za-z0-9_-]{20,}$/);
+    assert.equal(output.includes(token), false);
+    assert.match(output, /not printed in full/);
+    assert.match(output, new RegExp(`${token.slice(0, 4)}\\.\\.\\.${token.slice(-4)}`));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
 test("requires the one-time setup token before exposing TOTP setup secret", async () => {
   const panelPort = await allocatePanelPort();
   const panel = startPanel({
@@ -326,6 +362,45 @@ test("requires the one-time setup token before exposing TOTP setup secret", asyn
     assert.equal(Object.hasOwn(missingTokenPayload, "secret"), false);
     assert.equal(validTokenResponse.status, 200);
     assert.match(validTokenPayload.secret, /^[A-Z2-7 ]+$/);
+  } finally {
+    await panel.stop();
+  }
+});
+
+test("rate limits setup secret requests before exposing the TOTP seed", async () => {
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "",
+    CLOUDFLARE_GLOBAL_API_KEY: "",
+    RATE_LIMIT_ATTEMPTS: "2",
+    SETUP_TOKEN: "rate-limited-setup-token",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const firstResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "wrong-token" }),
+    });
+    const secondResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "wrong-token" }),
+    });
+    const blockedResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "rate-limited-setup-token" }),
+    });
+    const blockedPayload = await blockedResponse.json();
+
+    assert.equal(firstResponse.status, 401);
+    assert.equal(secondResponse.status, 401);
+    assert.equal(blockedResponse.status, 429);
+    assert.match(blockedPayload.error, /请求过于频繁/);
   } finally {
     await panel.stop();
   }
@@ -366,8 +441,14 @@ test("initializes admin first and then saves multiple Cloudflare accounts", asyn
     });
     const adminPayload = await adminResponse.json();
     const sessionCookie = adminResponse.headers.get("set-cookie")?.split(";")[0] || "";
+    const setupTokenAfterAdmin = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "manual-setup-token" }),
+    });
 
     assert.equal(adminResponse.status, 201);
+    assert.equal(setupTokenAfterAdmin.status, 409);
     assert.equal(adminPayload.authenticated, true);
     assert.equal(adminPayload.setupRequired, true);
     assert.equal(adminPayload.setupState.panelUserRequired, false);

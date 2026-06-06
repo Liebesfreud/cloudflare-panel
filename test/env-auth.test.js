@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 
 import { createConfig } from "../src/config/env.js";
 import { PanelAuthService, generateTotpSecret } from "../src/services/panel-auth-service.js";
+import { PersistentSecretService } from "../src/services/persistent-secret-service.js";
+import { SetupGuardService } from "../src/services/setup-guard-service.js";
 import { SqliteStore } from "../src/services/sqlite-store.js";
 import { makeTotp } from "./helpers/panel-test-environment.js";
 
@@ -34,10 +36,67 @@ test("createConfig keeps sensitive account material out of environment parsing",
 
   assert.equal(config.server.port, 3100);
   assert.equal(config.database.path, "/var/lib/network/panel.sqlite");
+  assert.equal(config.database.secretPath, "/var/lib/network/secret.key");
+  assert.equal(config.security.setupTokenPath, "/var/lib/network/setup-token.txt");
   assert.equal(Object.hasOwn(config, "auth"), false);
   assert.equal(Object.hasOwn(config.cloudflare, "accounts"), false);
   assert.equal(Object.hasOwn(config.cloudflare, "email"), false);
   assert.equal(Object.hasOwn(config.cloudflare, "globalApiKey"), false);
+});
+
+test("createConfig exposes explicit production hardening switches", () => {
+  const config = createConfig({
+    DATA_DIR: "/var/lib/network",
+    ENABLE_D1_SQL_CONSOLE: "true",
+    ENABLE_D1_SQL_MUTATIONS: "true",
+    PANEL_SECRET_KEY: "x".repeat(32),
+    PANEL_SECRET_KEY_FILE: "/run/secrets/cf-panel-key",
+    PUBLIC_ORIGIN: "https://panel.example.com",
+    TRUST_PROXY_HEADERS: "true",
+  });
+
+  assert.equal(config.database.secretKey, "x".repeat(32));
+  assert.equal(config.database.secretKeyFile, "/run/secrets/cf-panel-key");
+  assert.equal(config.features.d1SqlConsoleAllowMutations, true);
+  assert.equal(config.features.d1SqlConsoleEnabled, true);
+  assert.equal(config.server.publicOrigin, "https://panel.example.com");
+  assert.equal(config.server.trustProxyHeaders, true);
+});
+
+test("PersistentSecretService can read encryption material outside DATA_DIR", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cf-panel-secret-"));
+  const externalSecretPath = join(dir, "panel-secret.key");
+  const fallbackSecretPath = join(dir, "data", "secret.key");
+  const externalSecret = "s".repeat(40);
+
+  try {
+    await writeFile(externalSecretPath, `${externalSecret}\n`, { mode: 0o600 });
+    const service = new PersistentSecretService({
+      externalSecretPath,
+      secretPath: fallbackSecretPath,
+    });
+
+    assert.equal(service.readOrCreate(), externalSecret);
+    await assert.rejects(readFile(fallbackSecretPath, "utf8"), /ENOENT/);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+test("SetupGuardService persists generated setup token and removes it after setup", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cf-panel-setup-guard-"));
+  const tokenPath = join(dir, "setup-token.txt");
+  const service = new SetupGuardService({ tokenPath });
+
+  try {
+    assert.equal(service.persistForInitialSetup(), true);
+    assert.equal((await readFile(tokenPath, "utf8")).trim(), service.token);
+    assert.equal((await stat(tokenPath)).mode & 0o777, 0o600);
+    assert.equal(service.cleanupInitialSetupToken(), true);
+    await assert.rejects(readFile(tokenPath, "utf8"), /ENOENT/);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
 });
 
 test("PanelAuthService creates SQLite setup and verifies TOTP login", async () => {

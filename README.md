@@ -33,7 +33,7 @@ http://服务器IP:3000
 
 首次打开会进入两页初始化流程：
 
-1. 查看容器日志中的 `Initial setup token`。
+1. 查看容器日志中的 `Initial setup token` 提示。默认不会输出完整口令，需要进入容器读取 `/data/setup-token.txt`。
 2. 在第 1 页输入初始化口令，生成并保存 2FA 登录密钥到身份验证器。
 3. 创建管理员用户名和密码，输入当前 6 位 2FA 验证码确认绑定。
 4. 在第 2 页录入一个或多个 Cloudflare 账号名称、登录邮箱和 Global API Key。
@@ -50,8 +50,13 @@ PORT=3000
 DATA_DIR=/data
 SESSION_TTL_DAYS=30
 SECURE_COOKIES=false
+PUBLIC_ORIGIN=
+TRUST_PROXY_HEADERS=false
 CLOUDFLARE_REQUEST_TIMEOUT_MS=15000
 ENABLE_D1_SQL_CONSOLE=false
+ENABLE_D1_SQL_MUTATIONS=false
+RATE_LIMIT_ATTEMPTS=8
+RATE_LIMIT_WINDOW_MS=900000
 ```
 
 使用 `.env` 时：
@@ -93,7 +98,9 @@ node --test test/**/*.test.js
 
 浏览器只保存最长 30 天的 HttpOnly 随机会话 Cookie。所有状态修改接口要求 CSRF token；静态页和 JSON 响应带 CSP、`X-Frame-Options`、`nosniff` 等安全头。Cookie、localStorage、sessionStorage、接口响应和操作历史都不保存 Cloudflare Global API Key、管理员密码或 2FA 密钥。
 
-`/data/secret.key` 是 SQLite 敏感字段加密密钥，必须和 `/data/panel.sqlite` 一起备份；只泄露 SQLite 文件时无法直接读出 2FA seed 或 Cloudflare Global API Key。
+`/data/secret.key` 是 SQLite 敏感字段加密密钥，泄露等级等同敏感凭据。生产环境建议用 `PANEL_SECRET_KEY_FILE` 从 Docker secret 或独立只读挂载提供密钥材料，让密钥和 `/data/panel.sqlite` 分开存放；只泄露 SQLite 文件时无法直接读出 2FA seed 或 Cloudflare Global API Key。
+
+D1 SQL 控制台默认关闭。设置 `ENABLE_D1_SQL_CONSOLE=true` 后默认只允许单条 `SELECT/WITH` 查询；只有额外设置 `ENABLE_D1_SQL_MUTATIONS=true` 才允许写入或 DDL 语句。
 
 生产环境建议放在 HTTPS 反向代理后，并挂载 `/data` 做持久化备份。完整 Docker 部署、升级、备份和回滚流程见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 

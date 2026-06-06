@@ -1,8 +1,14 @@
 import { HttpError } from "../lib/http-error.js";
 import { readJsonBody } from "../lib/request-body.js";
+import { assertD1SqlAllowed } from "../lib/sql-safety.js";
 
 export class DeveloperResourcesController {
-  constructor({ d1SqlConsoleEnabled = false, developerResourcesService }) {
+  constructor({
+    d1SqlConsoleAllowMutations = false,
+    d1SqlConsoleEnabled = false,
+    developerResourcesService,
+  }) {
+    this.d1SqlConsoleAllowMutations = Boolean(d1SqlConsoleAllowMutations);
     this.d1SqlConsoleEnabled = Boolean(d1SqlConsoleEnabled);
     this.developerResourcesService = developerResourcesService;
   }
@@ -64,10 +70,12 @@ export class DeveloperResourcesController {
     }
 
     const body = await readJsonBody(request, { maxBytes: 64 * 1024 });
+    assertD1SqlAllowed(body.sql, { allowMutations: this.d1SqlConsoleAllowMutations });
     const result = await this.developerResourcesService.queryD1(
       body.accountId || url.searchParams.get("accountId"),
       params.resourceId,
-      body
+      body,
+      { allowMutations: this.d1SqlConsoleAllowMutations }
     );
     return { statusCode: 200, body: { result } };
   };
