@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import {
+  allocatePanelPort,
+  preparePanelTestEnvironment,
+} from "./helpers/panel-test-environment.js";
+
 function listen(server, port = 0) {
   server.listen(port, "127.0.0.1");
   return once(server, "listening").then(() => {
@@ -31,26 +36,10 @@ async function waitForHttp(url) {
 }
 
 function startPanel(env) {
+  const prepared = preparePanelTestEnvironment(env);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: new URL("..", import.meta.url),
-    env: {
-      ...process.env,
-      AUTH: "",
-      CF_API1: "",
-      CF_API2: "",
-      CF_API_KEY: "",
-      CF_EMAIL: "",
-      CF_GLOBAL_API_KEY: "",
-      CF_PANEL_SKIP_DOTENV: "true",
-      CLOUDFLARE_API_KEY: "",
-      CLOUDFLARE_EMAIL: "",
-      CLOUDFLARE_GLOBAL_API_KEY: "",
-      EMAIL1: "",
-      EMAIL2: "",
-      PASSWORD: "",
-      USER: "",
-      ...env,
-    },
+    env: { ...process.env, ...prepared.env },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -64,6 +53,7 @@ function startPanel(env) {
     async stop() {
       child.kill();
       await once(child, "exit").catch(() => {});
+      prepared.cleanup();
     },
   };
 }
@@ -289,22 +279,12 @@ test("manages developer platform resources through Cloudflare APIs", async () =>
   const requests = [];
   const cloudflareMock = createDeveloperResourcesMock({ accountId, requests });
   const mockUrl = await listen(cloudflareMock);
+  const panelPort = await allocatePanelPort();
   const panel = startPanel({
-    PORT: "0",
+    PORT: String(panelPort),
     CLOUDFLARE_API_BASE_URL: mockUrl,
     CLOUDFLARE_EMAIL: "admin@example.com",
     CLOUDFLARE_GLOBAL_API_KEY: "test-key",
-  });
-
-  const panelPort = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(panel.output.join(""))), 3_000);
-    panel.child.stdout.on("data", (chunk) => {
-      const match = chunk.toString().match(/http:\/\/127\.0\.0\.1:(\d+)/);
-      if (match) {
-        clearTimeout(timer);
-        resolve(match[1]);
-      }
-    });
   });
 
   try {

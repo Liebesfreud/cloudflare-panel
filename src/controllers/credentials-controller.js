@@ -1,21 +1,31 @@
 import { readJsonBody } from "../lib/request-body.js";
-import { maskEmail } from "../services/cloudflare-account-service.js";
+import { createOtpAuthUrl, generateTotpSecret } from "../services/panel-auth-service.js";
 
 export class CredentialsController {
-  constructor({ cloudflareAccountService, cloudflareClient, credentialSessionService, panelAuthService }) {
+  constructor({
+    authRateLimiter,
+    cloudflareAccountService,
+    cloudflareClient,
+    credentialSessionService,
+    panelAuthService,
+    setupGuardService,
+  }) {
+    this.authRateLimiter = authRateLimiter;
     this.cloudflareAccountService = cloudflareAccountService;
     this.cloudflareClient = cloudflareClient;
     this.credentialSessionService = credentialSessionService;
     this.panelAuthService = panelAuthService;
+    this.setupGuardService = setupGuardService;
   }
 
   status = async ({ request }) => {
     const sessionCredentials = this.credentialSessionService.getCredentials(request);
+    const setupState = this.panelAuthService.getSetupState();
     const panelLoginConfigured = this.panelAuthService.isConfigured();
     const hasCloudflareAccounts = this.cloudflareAccountService.hasAccounts();
-    const authenticated = panelLoginConfigured
-      ? Boolean(sessionCredentials?.authenticated)
-      : hasCloudflareAccounts;
+    const authenticated = setupState.setupRequired
+      ? false
+      : Boolean(sessionCredentials?.authenticated);
     const activeCloudflareAccountId = this.cloudflareAccountService.resolveSelectedAccountId(
       sessionCredentials?.activeCloudflareAccountId
     );
@@ -32,15 +42,218 @@ export class CredentialsController {
         accounts,
         activeCloudflareAccount,
         authenticated,
+        csrfToken: sessionCredentials?.csrfToken || "",
         email: authenticated ? activeCloudflareAccount?.email || "" : "",
         expiresAt: sessionCredentials?.expiresAt || "",
         hasCredentials: authenticated && hasCloudflareAccounts,
         loginRequired: panelLoginConfigured,
-        source: authenticated
-          ? sessionCredentials?.authenticated
-            ? "cookie"
-            : "server"
-          : "",
+        setupRequired: setupState.setupRequired,
+        setupState,
+        source: authenticated ? "cookie" : "",
+      },
+    };
+  };
+
+  setupStatus = async () => ({
+    statusCode: 200,
+    body: {
+      ...this.panelAuthService.getSetupState(),
+      setupTokenRequired: this.panelAuthService.getSetupState().panelUserRequired,
+    },
+  });
+
+  setupSecret = async ({ request }) => {
+    const setupState = this.panelAuthService.getSetupState();
+    const body = await readJsonBody(request);
+
+    if (!setupState.setupRequired || !setupState.panelUserRequired) {
+      return {
+        statusCode: 409,
+        body: { error: "面板管理员已经完成初始化。" },
+      };
+    }
+
+    if (!this.setupGuardService.verify(body.setupToken)) {
+      return {
+        statusCode: 401,
+        body: { error: "初始化口令错误，请查看容器启动日志。" },
+      };
+    }
+
+    const secret = generateTotpSecret();
+
+    return {
+      statusCode: 200,
+      body: {
+        otpauthUrl: createOtpAuthUrl({
+          issuer: "蜘蛛网络",
+          label: "Cloudflare Panel",
+          secret,
+        }),
+        secret,
+      },
+    };
+  };
+
+  completeSetup = async ({ request }) => {
+    const body = await readJsonBody(request);
+    const rateLimit = this.checkRateLimit(request, "setup");
+
+    if (!rateLimit.allowed) {
+      return rateLimit.response;
+    }
+
+    if (!this.setupGuardService.verify(body.setupToken)) {
+      return {
+        statusCode: 401,
+        body: { error: "初始化口令错误，请查看容器启动日志。" },
+      };
+    }
+
+    const result = this.panelAuthService.createSetup({
+      cfApiKey: body.cfApiKey || body.globalApiKey || "",
+      cfEmail: body.cfEmail || body.email || "",
+      cloudflareName: body.cloudflareName || body.cfName || "",
+      password: body.password || "",
+      totpCode: body.totpCode || body.auth || body.authCode || "",
+      totpSecret: body.totpSecret || "",
+      username: body.username || body.user || "",
+    });
+
+    if (result.error) {
+      return {
+        statusCode: result.statusCode || 400,
+        body: { error: result.error },
+      };
+    }
+
+    this.resetRateLimit(request, "setup");
+    const selectedAccountId = result.cloudflareAccount?.id || "";
+    const session = this.credentialSessionService.create({
+      activeCloudflareAccountId: selectedAccountId,
+      authenticated: true,
+      source: "panel",
+    });
+    const activeCloudflareAccount = this.cloudflareAccountService.getSafeAccount(selectedAccountId);
+
+    return {
+      statusCode: 201,
+      headers: {
+        "Set-Cookie": this.credentialSessionService.createCookie(request, session),
+      },
+      body: {
+        accounts: this.cloudflareAccountService.listSafe(selectedAccountId),
+        activeCloudflareAccount,
+        authenticated: true,
+        csrfToken: session.csrfToken,
+        email: activeCloudflareAccount?.email || "",
+        expiresAt: session.expiresAt,
+        hasCredentials: true,
+        loginRequired: true,
+        setupRequired: false,
+        source: "cookie",
+      },
+    };
+  };
+
+  createSetupAdmin = async ({ request }) => {
+    const body = await readJsonBody(request);
+    const rateLimit = this.checkRateLimit(request, "setup");
+
+    if (!rateLimit.allowed) {
+      return rateLimit.response;
+    }
+
+    if (!this.setupGuardService.verify(body.setupToken)) {
+      return {
+        statusCode: 401,
+        body: { error: "初始化口令错误，请查看容器启动日志。" },
+      };
+    }
+
+    const result = this.panelAuthService.createPanelUserSetup({
+      password: body.password || "",
+      totpCode: body.totpCode || body.auth || body.authCode || "",
+      totpSecret: body.totpSecret || "",
+      username: body.username || body.user || "",
+    });
+
+    if (result.error) {
+      return {
+        statusCode: result.statusCode || 400,
+        body: { error: result.error },
+      };
+    }
+
+    this.resetRateLimit(request, "setup");
+    const session = this.credentialSessionService.create({
+      authenticated: true,
+      source: "panel",
+    });
+
+    return {
+      statusCode: 201,
+      headers: {
+        "Set-Cookie": this.credentialSessionService.createCookie(request, session),
+      },
+      body: {
+        accounts: [],
+        activeCloudflareAccount: null,
+        authenticated: true,
+        csrfToken: session.csrfToken,
+        email: "",
+        expiresAt: session.expiresAt,
+        hasCredentials: false,
+        loginRequired: true,
+        setupRequired: true,
+        setupState: this.panelAuthService.getSetupState(),
+        source: "cookie",
+      },
+    };
+  };
+
+  createSetupCloudflareAccounts = async ({ request }) => {
+    const sessionCredentials = this.credentialSessionService.getCredentials(request);
+
+    if (!sessionCredentials?.authenticated) {
+      return {
+        statusCode: 401,
+        body: { error: "请先创建管理员账户并登录。" },
+      };
+    }
+
+    const body = await readJsonBody(request);
+    const accounts = Array.isArray(body.accounts) ? body.accounts : [];
+    const result = this.panelAuthService.createCloudflareAccountsSetup({ accounts });
+
+    if (result.error) {
+      return {
+        statusCode: result.statusCode || 400,
+        body: { error: result.error },
+      };
+    }
+
+    const selectedAccountId = result.accounts?.[0]?.id || "";
+    const session = this.credentialSessionService.update(request, {
+      activeCloudflareAccountId: selectedAccountId,
+      authenticated: true,
+    });
+    const activeCloudflareAccount = this.cloudflareAccountService.getSafeAccount(selectedAccountId);
+
+    return {
+      statusCode: 201,
+      body: {
+        accounts: this.cloudflareAccountService.listSafe(selectedAccountId),
+        activeCloudflareAccount,
+        authenticated: true,
+        csrfToken: session?.csrfToken || sessionCredentials.csrfToken || "",
+        email: activeCloudflareAccount?.email || "",
+        expiresAt: session?.expiresAt || sessionCredentials.expiresAt || "",
+        hasCredentials: true,
+        loginRequired: true,
+        setupRequired: false,
+        setupState: this.panelAuthService.getSetupState(),
+        source: "cookie",
       },
     };
   };
@@ -48,15 +261,15 @@ export class CredentialsController {
   connect = async ({ request }) => {
     const body = await readJsonBody(request);
     const user = String(body.user || body.username || "").trim();
-    const password = String(body.password || "").trim();
+    const password = String(body.password || "");
     const auth = String(body.auth || body.authCode || body.totp || "").trim();
     const activeCloudflareAccountId = String(body.cloudflareAccountId || "").trim();
 
-    if (!this.panelAuthService.isConfigured()) {
+    if (this.panelAuthService.getSetupState().setupRequired) {
       return {
         statusCode: 412,
         body: {
-          error: "请先配置 USER、PASSWORD、AUTH 三个环境变量。",
+          error: "请先完成首次初始化。",
         },
       };
     }
@@ -70,6 +283,12 @@ export class CredentialsController {
       };
     }
 
+    const rateLimit = this.checkRateLimit(request, `login:${user}`);
+
+    if (!rateLimit.allowed) {
+      return rateLimit.response;
+    }
+
     if (!this.panelAuthService.verify({ auth, password, user })) {
       return {
         statusCode: 401,
@@ -79,11 +298,12 @@ export class CredentialsController {
       };
     }
 
+    this.resetRateLimit(request, `login:${user}`);
     if (!this.cloudflareAccountService.hasAccounts()) {
       return {
         statusCode: 412,
         body: {
-          error: "请至少配置一组 Cloudflare 账号环境变量，例如 EMAIL1 和 CF_API1。",
+          error: "请先完成首次初始化并添加 Cloudflare 账号。",
         },
       };
     }
@@ -106,10 +326,12 @@ export class CredentialsController {
         accounts: this.cloudflareAccountService.listSafe(selectedAccountId),
         activeCloudflareAccount,
         authenticated: true,
+        csrfToken: session.csrfToken,
         email: activeCloudflareAccount?.email || "",
         expiresAt: session.expiresAt,
         hasCredentials: true,
         loginRequired: true,
+        setupRequired: false,
         source: "cookie",
       },
     };
@@ -148,10 +370,12 @@ export class CredentialsController {
         accounts: this.cloudflareAccountService.listSafe(requestedAccountId),
         activeCloudflareAccount: account,
         authenticated: true,
+        csrfToken: session?.csrfToken || sessionCredentials.csrfToken || "",
         email: account.email,
         expiresAt: session?.expiresAt || sessionCredentials.expiresAt || "",
         hasCredentials: true,
         loginRequired: true,
+        setupRequired: false,
         source: "cookie",
       },
     };
@@ -170,4 +394,32 @@ export class CredentialsController {
       },
     };
   };
+
+  checkRateLimit(request, scope) {
+    const key = `${scope}:${this.requestAddress(request)}`;
+    const result = this.authRateLimiter.check(key);
+
+    if (result.allowed) {
+      return { allowed: true };
+    }
+
+    return {
+      allowed: false,
+      response: {
+        statusCode: 429,
+        headers: {
+          "Retry-After": String(result.retryAfterSeconds),
+        },
+        body: { error: `请求过于频繁，请 ${result.retryAfterSeconds} 秒后重试。` },
+      },
+    };
+  }
+
+  resetRateLimit(request, scope) {
+    this.authRateLimiter.reset(`${scope}:${this.requestAddress(request)}`);
+  }
+
+  requestAddress(request) {
+    return request?.socket?.remoteAddress || "unknown";
+  }
 }

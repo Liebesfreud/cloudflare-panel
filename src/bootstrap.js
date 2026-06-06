@@ -11,7 +11,11 @@ import { CredentialSessionService } from "./services/credential-session-service.
 import { OperationHistoryService } from "./services/operation-history-service.js";
 import { PanelAuthService } from "./services/panel-auth-service.js";
 import { PageRulesService } from "./services/cloudflare/page-rules-service.js";
+import { PersistentSecretService } from "./services/persistent-secret-service.js";
+import { RateLimiterService } from "./services/rate-limiter-service.js";
 import { SpeedDeployService } from "./services/cloudflare/speed-deploy-service.js";
+import { SetupGuardService } from "./services/setup-guard-service.js";
+import { SqliteStore } from "./services/sqlite-store.js";
 import { SslSettingsService } from "./services/cloudflare/ssl-settings-service.js";
 import { WorkersService } from "./services/cloudflare/workers-service.js";
 import { ZonesService } from "./services/cloudflare/zones-service.js";
@@ -32,13 +36,20 @@ import { ZonesController } from "./controllers/zones-controller.js";
 import { createApp } from "./app.js";
 
 export function createContainer(config) {
+  const persistentSecretService = new PersistentSecretService({
+    secretPath: config.database.secretPath,
+  });
+  const sqliteStore = new SqliteStore({
+    databasePath: config.database.path,
+    secretKey: persistentSecretService.readOrCreate(),
+  });
   const cloudflareAccountService = new CloudflareAccountService({
-    accounts: config.cloudflare.accounts,
+    store: sqliteStore,
   });
   const cloudflareClient = new CloudflareClient({
     apiBaseUrl: config.cloudflare.apiBaseUrl,
-    email: config.cloudflare.email,
-    globalApiKey: config.cloudflare.globalApiKey,
+    email: "",
+    globalApiKey: "",
     requestTimeoutMs: config.cloudflare.requestTimeoutMs,
   });
   const zonesService = new ZonesService({
@@ -86,9 +97,14 @@ export function createContainer(config) {
   });
   const operationHistoryService = new OperationHistoryService();
   const panelAuthService = new PanelAuthService({
-    authSecret: config.auth.authSecret,
-    password: config.auth.password,
-    user: config.auth.user,
+    store: sqliteStore,
+  });
+  const setupGuardService = new SetupGuardService({
+    token: config.security.setupToken,
+  });
+  const authRateLimiter = new RateLimiterService({
+    limit: config.security.rateLimitAttempts,
+    windowMs: config.security.rateLimitWindowMs,
   });
   const analyticsController = new AnalyticsController({ analyticsService });
   const automationController = new AutomationController({ automationService });
@@ -97,13 +113,16 @@ export function createContainer(config) {
   const dnsRecordsController = new DnsRecordsController({ dnsRecordsService });
   const cacheSettingsController = new CacheSettingsController({ cacheSettingsService });
   const credentialsController = new CredentialsController({
+    authRateLimiter,
     cloudflareAccountService,
     cloudflareClient,
     credentialSessionService,
     panelAuthService,
+    setupGuardService,
   });
   const developerResourcesController = new DeveloperResourcesController({
     developerResourcesService,
+    d1SqlConsoleEnabled: config.features.d1SqlConsoleEnabled,
   });
   const firewallRulesController = new FirewallRulesController({ firewallRulesService });
   const operationHistoryController = new OperationHistoryController({
@@ -131,6 +150,7 @@ export function createContainer(config) {
       operationHistoryService,
       pageRulesController,
       panelAuthService,
+      setupGuardService,
       speedDeployController,
       sslSettingsController,
       workersController,
@@ -159,6 +179,9 @@ export function createContainer(config) {
     pageRulesController,
     pageRulesService,
     panelAuthService,
+    persistentSecretService,
+    setupGuardService,
+    sqliteStore,
     speedDeployController,
     speedDeployService,
     sslSettingsController,

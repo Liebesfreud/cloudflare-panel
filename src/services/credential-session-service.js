@@ -79,6 +79,7 @@ export class CredentialSessionService {
       activeCloudflareAccountId,
       authenticated: Boolean(authenticated),
       createdAt: new Date(createdAtMs).toISOString(),
+      csrfToken: randomBytes(32).toString("base64url"),
       email,
       expiresAt: new Date(expiresAtMs).toISOString(),
       expiresAtMs,
@@ -122,6 +123,7 @@ export class CredentialSessionService {
     return {
       activeCloudflareAccountId: session.activeCloudflareAccountId || "",
       authenticated: Boolean(session.authenticated),
+      csrfToken: session.csrfToken || "",
       email: session.email,
       expiresAt: session.expiresAt,
       globalApiKey: session.globalApiKey,
@@ -155,7 +157,25 @@ export class CredentialSessionService {
       session.authenticated = Boolean(updates.authenticated);
     }
 
+    if (!session.csrfToken) {
+      session.csrfToken = randomBytes(32).toString("base64url");
+    }
+
     return session;
+  }
+
+  verifyCsrf(request) {
+    const session = this.resolve(request);
+
+    if (!session?.authenticated || !session.csrfToken) {
+      return false;
+    }
+
+    const submitted = String(
+      request?.headers?.["x-csrf-token"] || request?.headers?.["X-CSRF-Token"] || ""
+    ).trim();
+
+    return Boolean(submitted && submitted === session.csrfToken);
   }
 
   createCookie(request, session) {

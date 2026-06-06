@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 
 import { publicDir } from "../config/paths.js";
+import { securityHeaders } from "../lib/security-headers.js";
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -37,6 +38,7 @@ export async function serveStaticFile(url, response) {
   try {
     const file = await readFile(filePath);
     response.writeHead(200, {
+      ...securityHeaders(),
       "Content-Type": mimeTypes.get(extname(filePath)) || "application/octet-stream",
       "Cache-Control": "no-store",
     });
@@ -44,6 +46,7 @@ export async function serveStaticFile(url, response) {
   } catch {
     const fallback = await readFile(resolve(publicDir, "index.html"));
     response.writeHead(200, {
+      ...securityHeaders(),
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     });

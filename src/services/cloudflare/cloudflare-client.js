@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { HttpError } from "../../lib/http-error.js";
 
 const missingCredentialMessage =
-  "缺少 Cloudflare 凭据。请配置 EMAIL1 和 CF_API1，或继续使用旧变量 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。";
+  "缺少 Cloudflare 凭据。请先完成首次初始化，并在面板中保存 Cloudflare 登录邮箱和 Global API Key。";
 
 export class CloudflareClient {
   constructor({ apiBaseUrl, email, globalApiKey, requestTimeoutMs, fetchImpl = fetch }) {

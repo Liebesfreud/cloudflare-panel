@@ -3,6 +3,23 @@ export function bindEvents(actions) {
     .querySelector("#cloudflare-connect-form")
     ?.addEventListener("submit", actions.connectSession);
   document
+    .querySelector("#panel-setup-form")
+    ?.addEventListener("submit", actions.completeSetup);
+  document
+    .querySelector("#cloudflare-accounts-setup-form")
+    ?.addEventListener("submit", actions.completeCloudflareSetup);
+  document
+    .querySelector("#setup-secret-refresh")
+    ?.addEventListener("click", actions.refreshSetupSecret);
+  document
+    .querySelector("#setup-add-cf-account")
+    ?.addEventListener("click", actions.addSetupCloudflareAccount);
+  document.querySelectorAll("[data-remove-cf-account]").forEach((button) => {
+    button.addEventListener("click", () =>
+      actions.removeSetupCloudflareAccount(Number(button.dataset.removeCfAccount))
+    );
+  });
+  document
     .querySelector("#cloudflare-account-switch")
     ?.addEventListener("change", actions.changeCloudflareAccount);
   document.querySelector("#logout-session")?.addEventListener("click", actions.logoutSession);

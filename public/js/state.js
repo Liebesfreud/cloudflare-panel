@@ -15,8 +15,21 @@ export const state = {
   sessionHasServerCredentials: false,
   sessionExpiresAt: "",
   sessionSource: "",
+  csrfToken: "",
   sessionError: "",
   loginRequired: false,
+  setupRequired: false,
+  setupLoadingSecret: false,
+  setupSubmitting: false,
+  setupSecret: "",
+  setupOtpAuthUrl: "",
+  setupToken: "",
+  setupStep: "admin",
+  setupCloudflareAccounts: [
+    { cloudflareName: "主账号", cfEmail: "", cfApiKey: "" },
+    { cloudflareName: "备用账号", cfEmail: "", cfApiKey: "" },
+    { cloudflareName: "第三账号", cfEmail: "", cfApiKey: "" },
+  ],
   cloudflareAccounts: [],
   activeCloudflareAccount: null,
   activeCloudflareAccountId: "",
@@ -172,9 +185,22 @@ export function resetSessionState() {
   state.sessionError = "";
   state.sessionExpiresAt = "";
   state.sessionSource = "";
+  state.csrfToken = "";
   state.sessionEmail = "";
   state.sessionHasServerCredentials = false;
   state.loginRequired = false;
+  state.setupRequired = false;
+  state.setupLoadingSecret = false;
+  state.setupSubmitting = false;
+  state.setupSecret = "";
+  state.setupOtpAuthUrl = "";
+  state.setupToken = "";
+  state.setupStep = "admin";
+  state.setupCloudflareAccounts = [
+    { cloudflareName: "主账号", cfEmail: "", cfApiKey: "" },
+    { cloudflareName: "备用账号", cfEmail: "", cfApiKey: "" },
+    { cloudflareName: "第三账号", cfEmail: "", cfApiKey: "" },
+  ];
   state.cloudflareAccounts = [];
   state.activeCloudflareAccount = null;
   state.activeCloudflareAccountId = "";

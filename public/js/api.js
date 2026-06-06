@@ -9,6 +9,32 @@ export class ApiUnavailableError extends Error {
 const API_UNAVAILABLE_MESSAGE =
   "当前页面未连接 Node.js 后端，请在 Node 服务部署地址打开后再登录。";
 
+let csrfToken = "";
+
+export function setCsrfToken(token = "") {
+  csrfToken = String(token || "");
+}
+
+function requestHeaders(headers = {}, method = "GET") {
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  const nextHeaders = { ...headers };
+
+  if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(normalizedMethod)) {
+    nextHeaders["X-CSRF-Token"] = csrfToken;
+  }
+
+  return nextHeaders;
+}
+
+function apiFetch(url, options = {}) {
+  const method = options.method || "GET";
+
+  return fetch(url, {
+    ...options,
+    headers: requestHeaders(options.headers, method),
+  });
+}
+
 function isJsonResponse(response) {
   const contentType = response.headers.get("content-type") || "";
 
@@ -31,14 +57,14 @@ async function readJson(response, fallbackMessage) {
 }
 
 export async function fetchZones() {
-  const response = await fetch("/api/zones");
+  const response = await apiFetch("/api/zones");
   const payload = await readJson(response, "读取域名失败");
 
   return payload.zones;
 }
 
 export async function createZone(request) {
-  const response = await fetch("/api/zones", {
+  const response = await apiFetch("/api/zones", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -49,12 +75,52 @@ export async function createZone(request) {
 }
 
 export async function fetchSessionStatus() {
-  const response = await fetch("/api/session/status");
+  const response = await apiFetch("/api/session/status");
   return readJson(response, "读取连接状态失败");
 }
 
+export async function fetchSetupSecret(setupToken = "") {
+  const response = await apiFetch("/api/setup/secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setupToken }),
+  });
+
+  return readJson(response, "生成 2FA 登录密钥失败");
+}
+
+export async function completeFirstRunSetup(payload) {
+  const response = await apiFetch("/api/setup/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return readJson(response, "首次初始化失败");
+}
+
+export async function createSetupAdmin(payload) {
+  const response = await apiFetch("/api/setup/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return readJson(response, "管理员账户初始化失败");
+}
+
+export async function createSetupCloudflareAccounts(payload) {
+  const response = await apiFetch("/api/setup/cloudflare-accounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return readJson(response, "Cloudflare 账号初始化失败");
+}
+
 export async function loginPanel(credentials) {
-  const response = await fetch("/api/session/connect", {
+  const response = await apiFetch("/api/session/connect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
@@ -66,7 +132,7 @@ export async function loginPanel(credentials) {
 export const connectCloudflareAccount = loginPanel;
 
 export async function switchCloudflareAccount(accountId) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/session/cloudflare-accounts/${encodeURIComponent(accountId)}/select`,
     {
       method: "POST",
@@ -77,7 +143,7 @@ export async function switchCloudflareAccount(accountId) {
 }
 
 export async function logoutCloudflareAccount() {
-  const response = await fetch("/api/session/logout", {
+  const response = await apiFetch("/api/session/logout", {
     method: "POST",
   });
 
@@ -85,14 +151,14 @@ export async function logoutCloudflareAccount() {
 }
 
 export async function fetchDnsRecords(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records`);
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records`);
   const payload = await readJson(response, "读取 DNS 记录失败");
 
   return payload.records;
 }
 
 export async function createDnsRecord(zoneId, record) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(record),
@@ -103,7 +169,7 @@ export async function createDnsRecord(zoneId, record) {
 }
 
 export async function updateDnsRecord(zoneId, recordId, record) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records/${recordId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records/${recordId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(record),
@@ -114,7 +180,7 @@ export async function updateDnsRecord(zoneId, recordId, record) {
 }
 
 export async function removeDnsRecord(zoneId, recordId) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records/${recordId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records/${recordId}`, {
     method: "DELETE",
   });
 
@@ -122,7 +188,7 @@ export async function removeDnsRecord(zoneId, recordId) {
 }
 
 export async function createDnsRecordsBulk(zoneId, records) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records/bulk`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records/bulk`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ records }),
@@ -133,7 +199,7 @@ export async function createDnsRecordsBulk(zoneId, records) {
 }
 
 export async function removeDnsRecordsBulk(zoneId, recordIds) {
-  const response = await fetch(`/api/zones/${zoneId}/dns-records/bulk-delete`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/dns-records/bulk-delete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recordIds }),
@@ -143,19 +209,19 @@ export async function removeDnsRecordsBulk(zoneId, recordIds) {
 }
 
 export async function fetchCacheSettings(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/cache-settings`);
+  const response = await apiFetch(`/api/zones/${zoneId}/cache-settings`);
   return readJson(response, "读取缓存设置失败");
 }
 
 export async function fetchSslSettings(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/ssl-settings`);
+  const response = await apiFetch(`/api/zones/${zoneId}/ssl-settings`);
   const payload = await readJson(response, "读取 SSL/TLS 设置失败");
 
   return payload.ssl;
 }
 
 export async function saveSslSettings(zoneId, settings) {
-  const response = await fetch(`/api/zones/${zoneId}/ssl-settings`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/ssl-settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
@@ -166,7 +232,7 @@ export async function saveSslSettings(zoneId, settings) {
 }
 
 export async function fetchCertificates(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/certificates`);
+  const response = await apiFetch(`/api/zones/${zoneId}/certificates`);
   return readJson(response, "读取证书状态失败");
 }
 
@@ -189,14 +255,14 @@ export async function fetchZoneAnalytics(zoneId, options = 7) {
     }
   }
 
-  const response = await fetch(`/api/zones/${zoneId}/analytics?${params.toString()}`);
+  const response = await apiFetch(`/api/zones/${zoneId}/analytics?${params.toString()}`);
   const payload = await readJson(response, "读取统计分析失败");
 
   return payload.analytics;
 }
 
 export async function saveCacheSettings(zoneId, settings) {
-  const response = await fetch(`/api/zones/${zoneId}/cache-settings`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/cache-settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
@@ -206,7 +272,7 @@ export async function saveCacheSettings(zoneId, settings) {
 }
 
 export async function purgeCache(zoneId, request) {
-  const response = await fetch(`/api/zones/${zoneId}/purge-cache`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/purge-cache`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -216,12 +282,12 @@ export async function purgeCache(zoneId, request) {
 }
 
 export async function fetchFirewallRules(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/firewall-rules`);
+  const response = await apiFetch(`/api/zones/${zoneId}/firewall-rules`);
   return readJson(response, "读取防火墙规则失败");
 }
 
 export async function createRulesetRule(zoneId, rule) {
-  const response = await fetch(`/api/zones/${zoneId}/firewall-rulesets/rules`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/firewall-rulesets/rules`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(rule),
@@ -232,7 +298,7 @@ export async function createRulesetRule(zoneId, rule) {
 }
 
 export async function updateRulesetRule(zoneId, rulesetId, ruleId, rule) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/zones/${zoneId}/firewall-rulesets/${encodeURIComponent(rulesetId)}/rules/${encodeURIComponent(ruleId)}`,
     {
       method: "PATCH",
@@ -246,7 +312,7 @@ export async function updateRulesetRule(zoneId, rulesetId, ruleId, rule) {
 }
 
 export async function removeRulesetRule(zoneId, rulesetId, ruleId) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/zones/${zoneId}/firewall-rulesets/${encodeURIComponent(rulesetId)}/rules/${encodeURIComponent(ruleId)}`,
     { method: "DELETE" }
   );
@@ -255,14 +321,14 @@ export async function removeRulesetRule(zoneId, rulesetId, ruleId) {
 }
 
 export async function fetchPageRules(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/page-rules`);
+  const response = await apiFetch(`/api/zones/${zoneId}/page-rules`);
   const payload = await readJson(response, "读取页面规则失败");
 
   return payload.rules;
 }
 
 export async function createFirewallRule(zoneId, rule) {
-  const response = await fetch(`/api/zones/${zoneId}/firewall-rules`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/firewall-rules`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(rule),
@@ -273,7 +339,7 @@ export async function createFirewallRule(zoneId, rule) {
 }
 
 export async function createPageRule(zoneId, rule) {
-  const response = await fetch(`/api/zones/${zoneId}/page-rules`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/page-rules`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(rule),
@@ -284,7 +350,7 @@ export async function createPageRule(zoneId, rule) {
 }
 
 export async function updateFirewallRule(zoneId, ruleId, rule) {
-  const response = await fetch(`/api/zones/${zoneId}/firewall-rules/${ruleId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/firewall-rules/${ruleId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(rule),
@@ -295,7 +361,7 @@ export async function updateFirewallRule(zoneId, ruleId, rule) {
 }
 
 export async function updatePageRule(zoneId, ruleId, rule) {
-  const response = await fetch(`/api/zones/${zoneId}/page-rules/${ruleId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/page-rules/${ruleId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(rule),
@@ -306,7 +372,7 @@ export async function updatePageRule(zoneId, ruleId, rule) {
 }
 
 export async function removeFirewallRule(zoneId, ruleId) {
-  const response = await fetch(`/api/zones/${zoneId}/firewall-rules/${ruleId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/firewall-rules/${ruleId}`, {
     method: "DELETE",
   });
 
@@ -314,7 +380,7 @@ export async function removeFirewallRule(zoneId, ruleId) {
 }
 
 export async function removePageRule(zoneId, ruleId) {
-  const response = await fetch(`/api/zones/${zoneId}/page-rules/${ruleId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/page-rules/${ruleId}`, {
     method: "DELETE",
   });
 
@@ -322,7 +388,7 @@ export async function removePageRule(zoneId, ruleId) {
 }
 
 export async function removeCustomCertificate(zoneId, certificateId) {
-  const response = await fetch(`/api/zones/${zoneId}/certificates/${certificateId}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/certificates/${certificateId}`, {
     method: "DELETE",
   });
 
@@ -330,7 +396,7 @@ export async function removeCustomCertificate(zoneId, certificateId) {
 }
 
 export async function uploadCustomCertificate(zoneId, request) {
-  const response = await fetch(`/api/zones/${zoneId}/certificates`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/certificates`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -341,7 +407,7 @@ export async function uploadCustomCertificate(zoneId, request) {
 }
 
 export async function createOriginCertificate(zoneId, request) {
-  const response = await fetch(`/api/zones/${zoneId}/origin-certificates`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/origin-certificates`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -352,7 +418,7 @@ export async function createOriginCertificate(zoneId, request) {
 }
 
 export async function removeOriginCertificate(zoneId, certificateId) {
-  const response = await fetch(`/api/zones/${zoneId}/origin-certificates/${encodeURIComponent(certificateId)}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/origin-certificates/${encodeURIComponent(certificateId)}`, {
     method: "DELETE",
   });
 
@@ -360,14 +426,14 @@ export async function removeOriginCertificate(zoneId, certificateId) {
 }
 
 export async function fetchSpeedAcceleratedDomains(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/speed-deploy`);
+  const response = await apiFetch(`/api/zones/${zoneId}/speed-deploy`);
   const payload = await readJson(response, "读取已加速域名失败");
 
   return payload.speed;
 }
 
 export async function deploySpeedAcceleration(zoneId, request) {
-  const response = await fetch(`/api/zones/${zoneId}/speed-deploy`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/speed-deploy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -378,7 +444,7 @@ export async function deploySpeedAcceleration(zoneId, request) {
 }
 
 export async function removeSpeedAcceleratedDomain(zoneId, accessDomain) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/zones/${zoneId}/speed-deploy/${encodeURIComponent(accessDomain)}`,
     { method: "DELETE" }
   );
@@ -391,14 +457,14 @@ function accountQuery(accountId) {
 }
 
 export async function fetchWorkers(accountId = "") {
-  const response = await fetch(`/api/workers${accountQuery(accountId)}`);
+  const response = await apiFetch(`/api/workers${accountQuery(accountId)}`);
   const payload = await readJson(response, "读取 Workers 失败");
 
   return payload.workers;
 }
 
 export async function fetchWorker(scriptName, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}${accountQuery(accountId)}`
   );
   const payload = await readJson(response, "读取 Worker 详情失败");
@@ -407,7 +473,7 @@ export async function fetchWorker(scriptName, accountId = "") {
 }
 
 export async function createWorker(request) {
-  const response = await fetch("/api/workers", {
+  const response = await apiFetch("/api/workers", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -418,7 +484,7 @@ export async function createWorker(request) {
 }
 
 export async function saveWorkerScript(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -429,7 +495,7 @@ export async function saveWorkerScript(scriptName, request) {
 }
 
 export async function removeWorker(scriptName, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}${accountQuery(accountId)}`,
     { method: "DELETE" }
   );
@@ -438,7 +504,7 @@ export async function removeWorker(scriptName, accountId = "") {
 }
 
 export async function saveWorkerSubdomain(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/subdomain`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/subdomain`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -448,7 +514,7 @@ export async function saveWorkerSubdomain(scriptName, request) {
 }
 
 export async function fetchWorkerRoutes(scriptName, zoneId) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/routes?zoneId=${encodeURIComponent(zoneId)}`
   );
   const payload = await readJson(response, "读取 Worker 路由失败");
@@ -457,7 +523,7 @@ export async function fetchWorkerRoutes(scriptName, zoneId) {
 }
 
 export async function createWorkerRoute(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/routes`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/routes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -468,7 +534,7 @@ export async function createWorkerRoute(scriptName, request) {
 }
 
 export async function removeWorkerRoute(scriptName, routeId, zoneId) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/routes/${encodeURIComponent(
       routeId
     )}?zoneId=${encodeURIComponent(zoneId)}`,
@@ -479,7 +545,7 @@ export async function removeWorkerRoute(scriptName, routeId, zoneId) {
 }
 
 export async function createWorkerDomain(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/domains`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/domains`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -490,7 +556,7 @@ export async function createWorkerDomain(scriptName, request) {
 }
 
 export async function removeWorkerDomain(scriptName, domainId, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/domains/${encodeURIComponent(
       domainId
     )}${accountQuery(accountId)}`,
@@ -501,7 +567,7 @@ export async function removeWorkerDomain(scriptName, domainId, accountId = "") {
 }
 
 export async function saveWorkerSettings(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/settings`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -511,7 +577,7 @@ export async function saveWorkerSettings(scriptName, request) {
 }
 
 export async function saveWorkerSecret(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/secrets`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/secrets`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -522,7 +588,7 @@ export async function saveWorkerSecret(scriptName, request) {
 }
 
 export async function removeWorkerSecret(scriptName, secretName, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/secrets/${encodeURIComponent(secretName)}${accountQuery(accountId)}`,
     { method: "DELETE" }
   );
@@ -531,7 +597,7 @@ export async function removeWorkerSecret(scriptName, secretName, accountId = "")
 }
 
 export async function saveWorkerSchedules(scriptName, request) {
-  const response = await fetch(`/api/workers/${encodeURIComponent(scriptName)}/schedules`, {
+  const response = await apiFetch(`/api/workers/${encodeURIComponent(scriptName)}/schedules`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -541,7 +607,7 @@ export async function saveWorkerSchedules(scriptName, request) {
 }
 
 export async function fetchWorkerDeployments(scriptName, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/deployments${accountQuery(accountId)}`
   );
   const payload = await readJson(response, "读取 Worker 部署记录失败");
@@ -550,7 +616,7 @@ export async function fetchWorkerDeployments(scriptName, accountId = "") {
 }
 
 export async function createWorkerTail(scriptName, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workers/${encodeURIComponent(scriptName)}/tail${accountQuery(accountId)}`,
     { method: "POST" }
   );
@@ -559,14 +625,14 @@ export async function createWorkerTail(scriptName, accountId = "") {
 }
 
 export async function fetchWorkerQueues(accountId = "") {
-  const response = await fetch(`/api/workers/queues${accountQuery(accountId)}`);
+  const response = await apiFetch(`/api/workers/queues${accountQuery(accountId)}`);
   const payload = await readJson(response, "读取 Queues 失败");
 
   return payload.queues;
 }
 
 export async function fetchDeveloperResources(type, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/${encodeURIComponent(type)}${accountQuery(accountId)}`
   );
   const payload = await readJson(response, "读取资源列表失败");
@@ -575,7 +641,7 @@ export async function fetchDeveloperResources(type, accountId = "") {
 }
 
 export async function createDeveloperResource(type, request) {
-  const response = await fetch(`/api/developer-resources/${encodeURIComponent(type)}`, {
+  const response = await apiFetch(`/api/developer-resources/${encodeURIComponent(type)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -586,7 +652,7 @@ export async function createDeveloperResource(type, request) {
 }
 
 export async function removeDeveloperResource(type, resourceId, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/${encodeURIComponent(type)}/${encodeURIComponent(
       resourceId
     )}${accountQuery(accountId)}`,
@@ -597,7 +663,7 @@ export async function removeDeveloperResource(type, resourceId, accountId = "") 
 }
 
 export async function fetchDeveloperResourceDetail(type, resourceId, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/${encodeURIComponent(type)}/${encodeURIComponent(resourceId)}/detail${accountQuery(accountId)}`
   );
   const payload = await readJson(response, "读取资源详情失败");
@@ -606,7 +672,7 @@ export async function fetchDeveloperResourceDetail(type, resourceId, accountId =
 }
 
 export async function savePagesBuildConfig(resourceId, request) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/pages/${encodeURIComponent(resourceId)}/build-config`,
     {
       method: "PATCH",
@@ -620,7 +686,7 @@ export async function savePagesBuildConfig(resourceId, request) {
 }
 
 export async function queryD1Database(resourceId, request) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/d1/${encodeURIComponent(resourceId)}/query`,
     {
       method: "POST",
@@ -634,7 +700,7 @@ export async function queryD1Database(resourceId, request) {
 }
 
 export async function putR2Object(resourceId, request) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/r2/${encodeURIComponent(resourceId)}/objects`,
     {
       method: "PUT",
@@ -650,7 +716,7 @@ export async function putR2Object(resourceId, request) {
 export async function removeR2Object(resourceId, key, accountId = "") {
   const params = new URLSearchParams(accountId ? { accountId } : {});
   params.set("key", key);
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/r2/${encodeURIComponent(resourceId)}/objects?${params.toString()}`,
     { method: "DELETE" }
   );
@@ -661,7 +727,7 @@ export async function removeR2Object(resourceId, key, accountId = "") {
 export async function fetchKvValue(resourceId, key, accountId = "") {
   const params = new URLSearchParams(accountId ? { accountId } : {});
   params.set("key", key);
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values?${params.toString()}`
   );
   const payload = await readJson(response, "读取 KV Value 失败");
@@ -670,7 +736,7 @@ export async function fetchKvValue(resourceId, key, accountId = "") {
 }
 
 export async function putKvValue(resourceId, request) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values`,
     {
       method: "PUT",
@@ -686,7 +752,7 @@ export async function putKvValue(resourceId, request) {
 export async function removeKvValue(resourceId, key, accountId = "") {
   const params = new URLSearchParams(accountId ? { accountId } : {});
   params.set("key", key);
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/kv/${encodeURIComponent(resourceId)}/values?${params.toString()}`,
     { method: "DELETE" }
   );
@@ -695,7 +761,7 @@ export async function removeKvValue(resourceId, key, accountId = "") {
 }
 
 export async function saveTunnelConfiguration(resourceId, request) {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/tunnels/${encodeURIComponent(resourceId)}/configuration`,
     {
       method: "PUT",
@@ -709,7 +775,7 @@ export async function saveTunnelConfiguration(resourceId, request) {
 }
 
 export async function fetchTunnelToken(resourceId, accountId = "") {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/developer-resources/tunnels/${encodeURIComponent(resourceId)}/token${accountQuery(accountId)}`
   );
   const payload = await readJson(response, "读取 Tunnel Token 失败");
@@ -718,14 +784,14 @@ export async function fetchTunnelToken(resourceId, accountId = "") {
 }
 
 export async function fetchAutomationState(zoneId) {
-  const response = await fetch(`/api/zones/${zoneId}/automation`);
+  const response = await apiFetch(`/api/zones/${zoneId}/automation`);
   const payload = await readJson(response, "读取自动优化设置失败");
 
   return payload.automation;
 }
 
 export async function saveAutomationSettings(zoneId, settings) {
-  const response = await fetch(`/api/zones/${zoneId}/automation`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
@@ -736,7 +802,7 @@ export async function saveAutomationSettings(zoneId, settings) {
 }
 
 export async function applyAutomationPreset(zoneId, preset) {
-  const response = await fetch(`/api/zones/${zoneId}/automation/apply`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation/apply`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ preset }),
@@ -747,7 +813,7 @@ export async function applyAutomationPreset(zoneId, preset) {
 }
 
 export async function saveAutomationDnsProxy(zoneId, enabled) {
-  const response = await fetch(`/api/zones/${zoneId}/automation/dns-proxy`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation/dns-proxy`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -758,7 +824,7 @@ export async function saveAutomationDnsProxy(zoneId, enabled) {
 }
 
 export async function saveAutomationFirewallRule(zoneId, ruleKey, enabled) {
-  const response = await fetch(`/api/zones/${zoneId}/automation/firewall/${ruleKey}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation/firewall/${ruleKey}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -769,7 +835,7 @@ export async function saveAutomationFirewallRule(zoneId, ruleKey, enabled) {
 }
 
 export async function saveAutomationPageRule(zoneId, ruleKey, enabled) {
-  const response = await fetch(`/api/zones/${zoneId}/automation/page-rules/${ruleKey}`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation/page-rules/${ruleKey}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -780,7 +846,7 @@ export async function saveAutomationPageRule(zoneId, ruleKey, enabled) {
 }
 
 export async function saveAutomationTieredCaching(zoneId, enabled) {
-  const response = await fetch(`/api/zones/${zoneId}/automation/tiered-caching`, {
+  const response = await apiFetch(`/api/zones/${zoneId}/automation/tiered-caching`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -806,14 +872,14 @@ export async function fetchOperationHistory(options = {}) {
   }
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(`/api/operation-history${suffix}`);
+  const response = await apiFetch(`/api/operation-history${suffix}`);
   const payload = await readJson(response, "读取操作历史失败");
 
   return payload.history;
 }
 
 export async function clearOperationHistory() {
-  const response = await fetch("/api/operation-history", { method: "DELETE" });
+  const response = await apiFetch("/api/operation-history", { method: "DELETE" });
   const payload = await readJson(response, "清空操作历史失败");
 
   return payload.history;

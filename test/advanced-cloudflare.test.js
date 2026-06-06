@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import {
+  allocatePanelPort,
+  preparePanelTestEnvironment,
+} from "./helpers/panel-test-environment.js";
+
 function listen(server, port = 0) {
   server.listen(port, "127.0.0.1");
   return once(server, "listening").then(() => {
@@ -31,26 +36,10 @@ async function waitForHttp(url) {
 }
 
 function startPanel(env) {
+  const prepared = preparePanelTestEnvironment(env);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: new URL("..", import.meta.url),
-    env: {
-      ...process.env,
-      AUTH: "",
-      CF_API1: "",
-      CF_API2: "",
-      CF_API_KEY: "",
-      CF_EMAIL: "",
-      CF_GLOBAL_API_KEY: "",
-      CF_PANEL_SKIP_DOTENV: "true",
-      CLOUDFLARE_API_KEY: "",
-      CLOUDFLARE_EMAIL: "",
-      CLOUDFLARE_GLOBAL_API_KEY: "",
-      EMAIL1: "",
-      EMAIL2: "",
-      PASSWORD: "",
-      USER: "",
-      ...env,
-    },
+    env: { ...process.env, ...prepared.env },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -59,6 +48,7 @@ function startPanel(env) {
     async stop() {
       child.kill();
       await once(child, "exit").catch(() => {});
+      prepared.cleanup();
     },
   };
 }
@@ -284,7 +274,7 @@ test("manages SSL settings, certificates, rulesets, and accelerated domain inven
   const requests = [];
   const cloudflareMock = createAdvancedMock({ zoneId, requests });
   const mockUrl = await listen(cloudflareMock);
-  const panelPort = 3240;
+  const panelPort = await allocatePanelPort();
   const panel = startPanel({
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "admin@example.com",

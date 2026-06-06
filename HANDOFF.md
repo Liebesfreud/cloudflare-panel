@@ -3008,4 +3008,162 @@ node --test test/smoke.test.js
 
 - Docker 镜像不包含 `.env`。
 - GitHub workflow 不写 Docker Hub 密码到仓库，只读取 GitHub Actions secrets。
-- 镜像运行所需 `USER/PASSWORD/AUTH/EMAILn/CF_APIn` 仍通过环境变量或 `--env-file` 注入。
+- 注意：下一节已废弃 `USER/PASSWORD/AUTH/EMAILn/CF_APIn` 敏感环境变量注入方式。
+
+## 2026-06-06 Docker-only、SQLite 首次初始化与强制 2FA
+
+用户要求移除全部非 Docker 部署方式，仅保留 Docker 部署；部署后第一次打开 `ip:端口` 时创建管理员账户，强制创建 2FA 登录密钥，再输入 Cloudflare 登录邮箱和 Global API Key。敏感信息不再采用 `.env` 或环境变量形式，统一存入 SQLite。
+
+本次变更：
+
+- 新增 `src/services/sqlite-store.js`
+  - 使用 Node 内置 `node:sqlite`。
+  - 默认数据库路径由 `DATA_DIR=/data` 得到 `/data/panel.sqlite`，也可用 `SQLITE_PATH` 覆盖。
+  - 表：
+    - `panel_user`：单管理员账户、scrypt 密码 hash、TOTP secret。
+    - `cloudflare_accounts`：Cloudflare 账号邮箱、Global API Key、展示名称。
+  - 开启 WAL 和 foreign keys。
+- 改造 `src/services/panel-auth-service.js`
+  - 不再读取 `USER/PASSWORD/AUTH`。
+  - 管理员密码使用 `crypto.scryptSync` 哈希。
+  - 服务端生成 Base32 TOTP secret。
+  - 初始化提交时必须验证当前 6 位 TOTP。
+- 改造 `src/services/cloudflare-account-service.js`
+  - 不再读取 `EMAILn/CF_APIn` 或旧 Cloudflare env。
+  - 每次从 SQLite 读取账号，前端只返回脱敏邮箱和账号 id。
+- 新增初始化 API：
+  - `GET /api/setup/status`
+  - `POST /api/setup/secret`
+  - `POST /api/setup/complete`
+- 路由边界：
+  - 未完成初始化时，除 `/api/setup/*` 和 `/api/session/*` 外，其它 API 返回“请先完成首次初始化”。
+  - `/api/session/cloudflare-accounts/:accountId/select` 支持 SQLite 生成的 `cf_...` id。
+- 操作历史：
+  - 排除 `/api/setup/*` 和 `/api/session/*`，避免记录密码、2FA secret、Global API Key 或登录请求。
+- 前端：
+  - `public/js/views/connect-view.js` 增加首次初始化页面。
+  - 页面包含管理员账户、2FA 登录密钥、当前验证码、Cloudflare 账号邮箱和 Global API Key。
+  - 正常登录页移除环境变量文案。
+- Docker：
+  - `Dockerfile` 新增 `DATA_DIR=/data`、创建 `/data`、声明 `VOLUME ["/data"]`。
+  - 删除非 Docker 部署入口：`api/index.js`、`vercel.json`、`.github/workflows/publish-pages-branch.yml`。
+  - 删除 GitHub Pages 静态构建脚本：`scripts/build-pages.js`、`test/pages-build.test.js`、`package.json` 的 `build:pages`。
+  - Docker workflow 只检查 `src public test`。
+- 文档：
+  - `README.md` 改为 Docker-only 快速运行和首次初始化说明。
+  - `DEPLOYMENT.md` 改为 Docker-only 部署、HTTPS/Cookie、备份、恢复、升级、Docker Hub workflow。
+  - `.env.example` 只保留非敏感参数：`PORT`、`DATA_DIR`、`SESSION_TTL_DAYS`、`SECURE_COOKIES`、`CLOUDFLARE_REQUEST_TIMEOUT_MS`。
+
+安全边界：
+
+- 不再使用 `USER/PASSWORD/AUTH/EMAILn/CF_APIn` 作为运行凭据。
+- 浏览器只保存 HttpOnly 随机 session id，最长 30 天。
+- 接口响应、Cookie、localStorage、sessionStorage、操作历史都不返回 Cloudflare Global API Key。
+- `/data/panel.sqlite` 是唯一敏感持久化文件，部署时必须挂载并纳入备份策略。
+
+测试：
+
+- `node --test test/**/*.test.js`
+  - 39 个测试全部通过。
+  - Node 24 会输出 `node:sqlite` experimental warning，属于运行时提示。
+
+## 2026-06-06 首次初始化拆分为管理员页和 Cloudflare 多账号页
+
+用户要求“两个页面分开”，第 1 页只创建面板管理员并强制 2FA，第 2 页再添加 Cloudflare 账号，而且 Cloudflare 账号添加页要支持更多账号输入，符合项目多账户管理定位。
+
+本次变更：
+
+- 后端初始化 API 拆分：
+  - `POST /api/setup/admin`：创建管理员账号、校验当前 TOTP、设置 HttpOnly session cookie，但仍保持 `setupRequired: true`。
+  - `POST /api/setup/cloudflare-accounts`：要求已认证 session，批量保存 Cloudflare 账号，完成后进入面板。
+  - 旧 `POST /api/setup/complete` 保留兼容，但已改为先完整校验管理员和 Cloudflare 账号，再在同一个 SQLite 事务内写入，避免账号校验失败导致半初始化。
+- `src/services/panel-auth-service.js`
+  - 拆出管理员校验、Cloudflare 多账号校验。
+  - 首次 Cloudflare 账号保存最多 10 个。
+  - 邮箱去重，邮箱/API Key 必填校验。
+  - 默认 UI 里的空账号占位行不会被当作提交账号。
+- `src/services/sqlite-store.js`
+  - 新增 `createCloudflareAccounts(accounts)`。
+  - 账号列表按 SQLite `rowid ASC` 返回，保证首次添加顺序稳定。
+- 前端初始化页：
+  - `public/js/views/connect-view.js` 根据 `state.setupStep` 渲染两页。
+  - 第 1 页：管理员用户名、密码、确认密码、2FA secret、当前 6 位验证码。
+  - 第 2 页：Cloudflare 多账号表单，默认展示“主账号 / 备用账号 / 第三账号”三组输入，可继续添加，最多 10 组。
+  - 第 2 页 wrapper 加宽为 `860px`，适配多账号录入。
+- 前端交互：
+  - `public/js/actions/session-actions.js` 新增 `completeCloudflareSetup`、`addSetupCloudflareAccount`、`removeSetupCloudflareAccount`。
+  - 添加/移除账号前读取现有输入，避免重渲染丢失表单内容。
+  - 只填写了邮箱或 API Key 的行才参与提交；仅保留默认名称的空行会被忽略。
+- 文档：
+  - `README.md` 和 `DEPLOYMENT.md` 改为两页初始化说明。
+  - 强调不再通过 `.env`、`USER/PASSWORD/AUTH`、`EMAILn/CF_APIn` 配置敏感信息。
+
+安全边界：
+
+- 第 2 页保存 Cloudflare 账号要求带第 1 页创建的管理员 session cookie。
+- API Key 只写入 SQLite，不进入 Cookie、localStorage、sessionStorage、接口响应或操作历史。
+- 首次初始化阶段 `/api/setup/*` 和 `/api/session/*` 仍从操作历史排除，避免记录密码、2FA secret 或 Global API Key。
+
+测试：
+
+- 新增 `PanelAuthService ignores empty preset Cloudflare account rows during setup` 覆盖默认空账号槽不阻塞保存。
+- 新增/保留 `initializes admin first and then saves multiple Cloudflare accounts` 覆盖两步初始化、多账号保存和响应不泄露 API Key。
+- 本轮验证目标：`node --test test/**/*.test.js` 应为 40+ 个测试全部通过。
+
+## 2026-06-06 安全加固：初始化抢占、密钥落盘、限速、CSRF 和安全头
+
+用户指出多个上线阻断级漏洞：首次初始化可被公网抢占、TOTP secret 和 Cloudflare Global API Key 明文落 SQLite、登录/初始化接口无限速、缺少 CSRF、防护响应头缺失、D1 SQL 控制台默认可执行任意 SQL。本轮按上线安全边界修复。
+
+本次变更：
+
+- 首次初始化抢占防护：
+  - 新增 `src/services/setup-guard-service.js`。
+  - 容器启动且未初始化时，`src/server.js` 在日志输出 `Initial setup token: ...`。
+  - `POST /api/setup/secret`、`POST /api/setup/admin`、兼容的 `POST /api/setup/complete` 都必须提交正确 `setupToken`。
+  - 前端管理员初始化页新增“初始化口令”输入；只有输入口令后才生成 2FA secret。
+- SQLite 敏感字段加密：
+  - 新增 `src/services/secret-box.js`，使用 AES-256-GCM，密文格式 `enc:v1:...`。
+  - 新增 `src/services/persistent-secret-service.js`，默认创建并读取 `/data/secret.key`。
+  - `src/services/sqlite-store.js` 写入 `totp_secret` 和 `global_api_key` 前加密，读取时解密。
+  - 旧明文值仍兼容读取，但新写入数据为密文。
+- 登录和初始化限速：
+  - 新增 `src/services/rate-limiter-service.js`。
+  - `POST /api/setup/admin`、`POST /api/setup/complete`、`POST /api/session/connect` 按远端 socket 地址和作用域限速。
+  - 默认 `RATE_LIMIT_ATTEMPTS=8`，`RATE_LIMIT_WINDOW_MS=900000`。
+- CSRF 和同源校验：
+  - `src/services/credential-session-service.js` 为每个服务端 session 生成 `csrfToken`。
+  - `src/routes/api-routes.js` 对已认证的非 GET/HEAD/OPTIONS 写操作校验 `X-CSRF-Token`。
+  - 写操作同时校验 `Origin` 或 `Referer` 与当前 Host 同源；缺失来源头时允许，以兼容 curl/反向代理健康检查。
+  - `public/js/api.js` 增加统一 `apiFetch()`，自动给非 GET 请求附加 CSRF token。
+- 安全响应头：
+  - 新增 `src/lib/security-headers.js`。
+  - JSON 和静态资源统一带：
+    - `Content-Security-Policy`
+    - `X-Frame-Options: DENY`
+    - `X-Content-Type-Options: nosniff`
+    - `Referrer-Policy: same-origin`
+    - `Cross-Origin-Opener-Policy: same-origin`
+- D1 SQL 控制台：
+  - `src/controllers/developer-resources-controller.js` 默认拒绝 `POST /api/developer-resources/d1/:id/query`。
+  - 需要显式设置 `ENABLE_D1_SQL_CONSOLE=true` 才允许执行任意 SQL。
+  - D1 固定表列表查询仍可用于详情展示，不走外部任意 SQL 控制台开关。
+- 文档：
+  - `README.md`、`DEPLOYMENT.md`、`.env.example` 更新初始化口令、`secret.key` 备份、D1 SQL 默认关闭、CSRF/安全头说明。
+
+安全边界：
+
+- `/data/panel.sqlite` 单独泄露时不再直接暴露 TOTP seed 或 Cloudflare Global API Key。
+- `/data/secret.key` 是加密密钥材料，泄露等级等同敏感凭据；备份和权限需要和数据库同级保护。
+- 未初始化公网暴露时，攻击者没有容器日志里的初始化口令，不能获取 2FA secret 或创建管理员。
+- 登录成功后前端不会把 CSRF token 写入 localStorage/sessionStorage，只存在当前 JS 内存状态。
+
+测试：
+
+- `node --test test/**/*.test.js`
+  - 43 个测试全部通过。
+- `find src public test -name '*.js' -print -exec node --check {} \;`
+  - 全部通过。
+- 新增覆盖：
+  - 没有初始化口令不能获取 TOTP setup secret。
+  - 已认证写操作缺少 CSRF token 返回 403。
+  - SQLite 原始 `totp_secret` 和 `global_api_key` 列为 `enc:v1:` 密文，不等于明文。

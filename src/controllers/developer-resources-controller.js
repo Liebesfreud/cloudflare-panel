@@ -2,7 +2,8 @@ import { HttpError } from "../lib/http-error.js";
 import { readJsonBody } from "../lib/request-body.js";
 
 export class DeveloperResourcesController {
-  constructor({ developerResourcesService }) {
+  constructor({ d1SqlConsoleEnabled = false, developerResourcesService }) {
+    this.d1SqlConsoleEnabled = Boolean(d1SqlConsoleEnabled);
     this.developerResourcesService = developerResourcesService;
   }
 
@@ -58,6 +59,10 @@ export class DeveloperResourcesController {
   };
 
   queryD1 = async ({ params, request, url }) => {
+    if (!this.d1SqlConsoleEnabled) {
+      throw new HttpError(403, "D1 SQL 控制台默认关闭，请设置 ENABLE_D1_SQL_CONSOLE=true 后再使用。");
+    }
+
     const body = await readJsonBody(request, { maxBytes: 64 * 1024 });
     const result = await this.developerResourcesService.queryD1(
       body.accountId || url.searchParams.get("accountId"),

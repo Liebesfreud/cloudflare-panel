@@ -1,225 +1,57 @@
-# 部署文档
+# Docker 部署文档
 
-本文档用于部署 Cloudflare Preferred Panel。项目主体是无第三方依赖的原生 Node.js 应用，Cloudflare Global API Key 只在服务端或 serverless 环境变量中读取，不会写入前端资源、Cookie、浏览器存储或接口响应。
+本项目只保留 Docker 部署方式。面板敏感信息不再通过环境变量配置；第一次打开 `ip:端口` 时必须输入容器启动日志中的一次性初始化口令，再创建管理员账户、强制绑定 2FA，并在第二页录入一个或多个 Cloudflare 账号。数据持久化到 SQLite，默认路径为 `/data/panel.sqlite`；2FA seed 和 Cloudflare Global API Key 使用 `/data/secret.key` 派生密钥加密落盘。
 
 ## 运行要求
 
-- Node.js 20 LTS 或更高版本。项目依赖 Node 原生 `fetch`、`http`、`crypto` 和 ES Module 能力，当前已在 Node.js 24.14.0 下验证。
-- 一台可以访问 `https://api.cloudflare.com/client/v4` 的服务器或 Node serverless 平台。
-- 面板登录信息：`USER`、`PASSWORD`、`AUTH`。
-- 至少一组 Cloudflare 账号：`EMAIL1` 和 `CF_API1`。
-- 建议生产环境放在 HTTPS 反向代理后，并限制后台访问来源。
+- Docker Engine 或兼容运行时。
+- 宿主机能访问 `https://api.cloudflare.com/client/v4`。
+- 生产环境建议放在 HTTPS 反向代理后。
+- 必须挂载 `/data`，否则容器重建后初始化账户和 Cloudflare 账号会丢失。
 
-## 环境变量
-
-面板登录：
-
-```bash
-USER=admin
-PASSWORD=change-this-password
-AUTH=JBSWY3DPEHPK3PXP
-```
-
-`AUTH` 是 TOTP Base32 密钥。登录页面输入的是当前 6 位动态验证码，不是把 `AUTH` 原样填到浏览器。
-
-Cloudflare 多账号：
-
-```bash
-EMAIL1=first-cloudflare@example.com
-CF_API1=first-global-api-key
-CF_NAME1=主账号
-EMAIL2=second-cloudflare@example.com
-CF_API2=second-global-api-key
-CF_NAME2=备用账号
-```
-
-可继续按序增加 `EMAIL3/CF_API3`、`EMAIL4/CF_API4`。`CF_NAMEn` 可选，仅用于前端账号选择器展示。
-
-兼容旧变量名：如果没有配置 `EMAIL1/CF_API1`，仍可用 `CLOUDFLARE_EMAIL`、`CLOUDFLARE_GLOBAL_API_KEY`、`CF_EMAIL`、`CF_GLOBAL_API_KEY`、`CLOUDFLARE_API_KEY`、`CF_API_KEY` 作为第一组账号。新部署建议使用 `EMAILn/CF_APIn`。
-
-可选变量：
-
-- `PORT`：本地 Node 服务端口，默认 `3000`。
-- `CLOUDFLARE_API_BASE_URL`：默认 `https://api.cloudflare.com/client/v4`，仅测试或代理场景需要改。
-- `CLOUDFLARE_REQUEST_TIMEOUT_MS`：Cloudflare API 请求超时，默认 `15000`。
-- `SESSION_TTL_DAYS`：浏览器面板会话保留天数，最大 `30`。
-- `SECURE_COOKIES`：设为 `true` 后强制会话 Cookie 带 `Secure`。`NODE_ENV=production` 时会自动启用。
-
-## 本地部署
-
-获取代码：
-
-```bash
-git clone https://github.com/baize-projects/network.git
-cd network
-cp .env.example .env
-```
-
-编辑 `.env`，至少填入：
-
-```bash
-USER=admin
-PASSWORD=change-this-password
-AUTH=BASE32_TOTP_SECRET
-EMAIL1=first-cloudflare@example.com
-CF_API1=first-global-api-key
-PORT=3000
-SESSION_TTL_DAYS=30
-SECURE_COOKIES=false
-```
-
-启动服务：
-
-```bash
-npm run dev
-```
-
-如果机器没有 `npm`，可以直接运行：
-
-```bash
-node src/server.js
-```
-
-指定端口：
-
-```bash
-PORT=3003 node src/server.js
-```
-
-打开：
-
-```text
-http://127.0.0.1:3003/
-```
-
-## Serverless 部署
-
-### Vercel
-
-仓库已提供 `api/index.js` 和 `vercel.json`，可把同一套 Node API 跑在 Vercel Serverless Functions 上。
-
-1. 在 Vercel 导入仓库。
-2. 在 Project Settings -> Environment Variables 添加：
-   - `USER`
-   - `PASSWORD`
-   - `AUTH`
-   - `EMAIL1`
-   - `CF_API1`
-   - 可选 `CF_NAME1`、`EMAIL2`、`CF_API2`、`CF_NAME2` 等。
-3. 部署完成后访问 Vercel 域名，前端和 `/api/*` 会在同一域名下工作。
-
-### GitHub Pages
-
-GitHub Pages 只能托管静态前端，不能执行 Cloudflare API 后端。仓库内置 `.github/workflows/publish-pages-branch.yml`，推送 `main` 后会自动：
-
-1. 检查 `src`、`public`、`scripts`、`test` 下的 JavaScript 语法。
-2. 运行 `node --test test/**/*.test.js`。
-3. 执行 `node scripts/build-pages.js _site "$GITHUB_SHA"` 生成静态产物。
-4. 把 `_site/` 强制推送到 `pages` 分支。
-
-本地也可以生成 Pages 产物：
-
-```bash
-npm run build:pages
-```
-
-如果没有 `npm`：
-
-```bash
-node scripts/build-pages.js _site local-check
-```
-
-`scripts/build-pages.js` 会在 `_site/` 内给 HTML、JS 模块 import、CSS `@import` 和本地图片资源追加 `?v=<commit-sha>`，避免 GitHub Pages 或浏览器缓存旧 JS/CSS 导致样式、脚本不同步。
-
-Pages 页面只能用于展示前端壳子。真实 Cloudflare 管理功能必须访问部署了 Node API 的地址，或后续接入单独的 API 后端。
-
-### Cloudflare Workers / Pages Functions
-
-当前仓库主体是 Node HTTP runtime，不能直接作为 Cloudflare Workers 脚本运行。若要完全运行在 Cloudflare Workers 或 Pages Functions，需要新增 Fetch runtime 适配层，并确认所有 Node API 使用都兼容 Workers。环境变量命名仍应保持 `USER`、`PASSWORD`、`AUTH`、`EMAIL1`、`CF_API1`。
-
-## 生产启动
-
-直接启动：
-
-```bash
-NODE_ENV=production PORT=3000 node src/server.js
-```
-
-使用 `npm` 启动：
-
-```bash
-PORT=3000 npm start
-```
-
-生产环境建议使用 systemd、PM2 或其他进程管理器托管进程，保证异常退出后自动拉起。
-
-## Docker 部署
-
-仓库提供 `Dockerfile` 和 GitHub Actions workflow：`.github/workflows/docker-image.yml`。每次推送 `main` 或推送 `v*` 标签时，Actions 会先执行语法检查和测试，再构建 `linux/amd64`、`linux/arm64` 镜像并推送到 Docker Hub。
-
-### 配置 Docker Hub 自动构建
-
-在 GitHub 仓库 Settings -> Secrets and variables -> Actions 中添加：
-
-- `DOCKERHUB_USERNAME`：Docker Hub 用户名。
-- `DOCKERHUB_TOKEN`：Docker Hub Access Token，建议不要使用网页登录密码。
-- `DOCKERHUB_REPOSITORY`：可选，完整镜像名，例如 `baize233/network`。不填时默认使用 `DOCKERHUB_USERNAME/当前仓库名`。
-
-未配置 `DOCKERHUB_USERNAME` 或 `DOCKERHUB_TOKEN` 时，Docker workflow 仍会运行测试和镜像构建验证，但会跳过 Docker Hub 登录和推送，并在 Actions 中输出 warning。配置 secrets 后，下一次推送会自动上传镜像。
-
-推送成功后会生成这些标签：
-
-- `latest`：`main` 分支最新镜像。
-- `sha-<commit>`：每次提交对应镜像。
-- `v*`：推送 Git tag 时生成同名版本标签。
-
-### 本地构建镜像
-
-```bash
-docker build -t cloudflare-preferred-panel:local .
-```
-
-### docker run
-
-先准备 `.env`，内容可参考 `.env.example`：
-
-```bash
-USER=admin
-PASSWORD=change-this-password
-AUTH=BASE32_TOTP_SECRET
-EMAIL1=first-cloudflare@example.com
-CF_API1=first-global-api-key
-PORT=3000
-SESSION_TTL_DAYS=30
-```
-
-生产运行：
+## 快速运行
 
 ```bash
 docker run -d \
   --name cloudflare-preferred-panel \
   --restart unless-stopped \
-  --env-file .env \
   -p 3000:3000 \
+  -v cloudflare-panel-data:/data \
   baize233/network:latest
 ```
 
-如果 Docker Hub 镜像名不是 `baize233/network`，把最后一行替换成你的 `DOCKERHUB_REPOSITORY:latest`。
+打开：
 
-本机 HTTP 直连调试时，如果没有 HTTPS 反向代理，可以临时覆盖：
+```text
+http://服务器IP:3000
+```
+
+首次初始化分两页完成：
+
+1. 运行 `docker compose logs -f` 或 `docker logs cloudflare-preferred-panel` 查看 `Initial setup token`。
+2. 第 1 页输入初始化口令。
+3. 生成 2FA 登录密钥，复制到身份验证器。
+4. 输入管理员用户名、密码、确认密码和当前 6 位 2FA 验证码，创建管理员并进入下一步。
+5. 第 2 页录入一个或多个 Cloudflare 账号名称、登录邮箱和 Global API Key。
+6. 保存后浏览器继续使用 HttpOnly 会话 Cookie，进入管理面板。
+
+## 可选运行参数
+
+只允许通过环境变量配置非敏感运行参数：
 
 ```bash
-docker run --rm \
-  --env-file .env \
-  -e NODE_ENV=development \
-  -e SECURE_COOKIES=false \
-  -p 3000:3000 \
-  baize233/network:latest
+PORT=3000
+DATA_DIR=/data
+SESSION_TTL_DAYS=30
+SECURE_COOKIES=false
+CLOUDFLARE_REQUEST_TIMEOUT_MS=15000
+ENABLE_D1_SQL_CONSOLE=false
+# CLOUDFLARE_API_BASE_URL=https://api.cloudflare.com/client/v4
 ```
 
-生产环境建议保持默认 `NODE_ENV=production`，并放在 HTTPS 反向代理后面。此时会话 Cookie 会带 `Secure`，HTTP 明文访问时浏览器不会保存登录 Cookie。
+不要再设置 `USER`、`PASSWORD`、`AUTH`、`EMAIL1`、`CF_API1` 等敏感环境变量。它们已经不被应用读取。
 
-### docker compose
+## docker compose
 
 ```yaml
 services:
@@ -227,10 +59,19 @@ services:
     image: baize233/network:latest
     container_name: cloudflare-preferred-panel
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
       - "3000:3000"
+    volumes:
+      - cloudflare-panel-data:/data
+    environment:
+      PORT: "3000"
+      DATA_DIR: /data
+      SESSION_TTL_DAYS: "30"
+      SECURE_COOKIES: "false"
+      ENABLE_D1_SQL_CONSOLE: "false"
+
+volumes:
+  cloudflare-panel-data:
 ```
 
 启动：
@@ -240,7 +81,49 @@ docker compose up -d
 docker compose logs -f
 ```
 
-### Docker 升级
+## HTTPS 与 Cookie
+
+`NODE_ENV=production` 时会话 Cookie 默认带 `Secure`。如果直接用 HTTP 访问生产容器，浏览器可能无法保存登录 Cookie。
+
+推荐做法：
+
+- 生产环境：放在 HTTPS 反向代理后，保持默认安全 Cookie。
+- 本机调试：显式设置 `SECURE_COOKIES=false`。
+
+Nginx 示例：
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+## 备份与恢复
+
+备份 SQLite 数据和加密密钥：
+
+```bash
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /data/panel.sqlite /backup/panel.sqlite.backup && cp /data/secret.key /backup/secret.key.backup'
+```
+
+恢复前先停止容器，并同时恢复 SQLite 与加密密钥：
+
+```bash
+docker stop cloudflare-preferred-panel
+docker run --rm \
+  -v cloudflare-panel-data:/data \
+  -v "$PWD":/backup \
+  alpine sh -c 'cp /backup/panel.sqlite.backup /data/panel.sqlite && cp /backup/secret.key.backup /data/secret.key'
+docker start cloudflare-preferred-panel
+```
+
+## 升级
 
 ```bash
 docker pull baize233/network:latest
@@ -249,230 +132,56 @@ docker rm cloudflare-preferred-panel
 docker run -d \
   --name cloudflare-preferred-panel \
   --restart unless-stopped \
-  --env-file .env \
   -p 3000:3000 \
+  -v cloudflare-panel-data:/data \
   baize233/network:latest
 ```
 
-使用 compose：
+Compose：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-### Docker 健康检查
+## Docker Hub 自动构建
 
-镜像内置 healthcheck，会请求：
+仓库保留 `.github/workflows/docker-image.yml`。每次推送 `main` 或 `v*` tag 时，workflow 会：
 
-```text
-http://127.0.0.1:${PORT}/api/session/status
-```
+1. 检查 JavaScript 语法。
+2. 运行 `node --test test/**/*.test.js`。
+3. 构建 `linux/amd64` 和 `linux/arm64` Docker 镜像。
+4. 如果配置了 Docker Hub secrets，则推送镜像。
 
-查看状态：
+需要在 GitHub Actions Secrets 配置：
 
-```bash
-docker ps
-docker inspect --format='{{json .State.Health}}' cloudflare-preferred-panel
-```
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+- `DOCKERHUB_REPOSITORY`，可选，例如 `baize233/network`
 
-## systemd 示例
+未配置 Docker Hub secrets 时，workflow 仍会测试和构建镜像，但跳过推送。
 
-假设项目部署在 `/opt/network`，Node 路径是 `/usr/bin/node`：
+## 安全检查
 
-```ini
-[Unit]
-Description=Cloudflare Preferred Panel
-After=network-online.target
-Wants=network-online.target
+- 不提交真实 SQLite 数据库、截图、私钥、证书、Cloudflare Global API Key 或管理员密码。
+- 未完成首次初始化前，`/api/setup/secret` 和管理员创建接口必须校验容器日志中的一次性初始化口令。
+- 2FA seed 和 Cloudflare Global API Key 使用 AES-GCM 加密后落 SQLite；`/data/secret.key` 泄露等级等同密钥材料。
+- 浏览器 Cookie 只保存随机 session id；状态修改接口要求 CSRF token，并做同源来源校验。
+- 静态页和 JSON 响应带 CSP、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy` 等安全响应头。
+- 操作历史不记录请求体，不保存密码、2FA 密钥或 Global API Key。
+- D1 SQL 控制台默认关闭，只有设置 `ENABLE_D1_SQL_CONSOLE=true` 后才允许执行任意 SQL。
+- `/data/panel.sqlite` 和 `/data/secret.key` 应纳入服务器备份策略，并限制宿主机文件访问权限。
 
-[Service]
-Type=simple
-WorkingDirectory=/opt/network
-Environment=NODE_ENV=production
-Environment=PORT=3000
-EnvironmentFile=/opt/network/.env
-ExecStart=/usr/bin/node src/server.js
-Restart=always
-RestartSec=3
-NoNewPrivileges=true
-PrivateTmp=true
+## 验收
 
-[Install]
-WantedBy=multi-user.target
-```
+部署后建议逐项检查：
 
-安装并启动：
-
-```bash
-sudo cp cloudflare-panel.service /etc/systemd/system/cloudflare-panel.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now cloudflare-panel
-sudo systemctl status cloudflare-panel
-```
-
-查看日志：
-
-```bash
-journalctl -u cloudflare-panel -f
-```
-
-## Nginx 反向代理示例
-
-```nginx
-server {
-    listen 80;
-    server_name panel.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-生产环境请再配置 HTTPS 证书，或放在已经启用 HTTPS 的网关后面。
-
-## 部署后健康检查
-
-基础检查：
-
-```bash
-curl -I http://127.0.0.1:3000/
-curl http://127.0.0.1:3000/api/session/status
-```
-
-预期结果：
-
-- 首页返回 `200`。
-- `/api/session/status` 返回 JSON。
-- 未登录但已配置 `USER/PASSWORD/AUTH` 时，`loginRequired` 为 `true`、`authenticated` 为 `false`，不会返回 Cloudflare 账号列表。
-- 登录后返回 `authenticated: true`、`accounts` 脱敏列表和当前 `activeCloudflareAccount`。
-- 响应中不应出现 Global API Key、面板密码或 `AUTH`。
-- 登录后响应头应设置 `HttpOnly`、`SameSite=Lax`、`Max-Age=2592000` 的 `cf_panel_session` Cookie。
-- Cookie 值不应包含邮箱、密码、2FA 密钥或 Global API Key。
-
-只读功能检查：
-
-1. 打开面板首页，输入 `USER`、`PASSWORD` 和当前 2FA 验证码进入后台。
-2. 进入“域名管理”，确认当前选中账号的 Zone 列表可以加载。
-3. 如果配置了多个账号，使用顶部账号选择器切换，确认域名列表会刷新。
-4. 点击任意域名，检查 DNS、SSL/TLS、缓存管理、防火墙、统计分析、页面规则、证书管理页面是否能打开。
-5. 检查一键加速、自动优化、Workers、Pages、D1、R2、KV、Tunnels、操作历史页面是否能打开。
-6. 浏览器控制台不应出现 JavaScript error。
-7. 未明确授权前，不要提交新增、编辑、删除、清空缓存、部署 Worker、创建证书等真实写操作。
-
-## 升级流程
-
-```bash
-git fetch origin
-git pull --ff-only origin main
-node --test test/**/*.test.js
-sudo systemctl restart cloudflare-panel
-sudo systemctl status cloudflare-panel
-```
-
-如果当前环境没有 `npm`，测试使用 `node --test test/**/*.test.js` 即可。
-
-## 回滚流程
-
-查看最近提交：
-
-```bash
-git log --oneline -5
-```
-
-回到上一个已知可用版本：
-
-```bash
-git checkout <commit-sha>
-sudo systemctl restart cloudflare-panel
-```
-
-确认功能恢复后，再决定是否在主分支上修复并重新部署。不要回滚 `.env` 中的真实凭据。
-
-## 安全边界
-
-- 不要提交 `.env`、真实 Global API Key、面板密码、TOTP 密钥、私钥、证书文件或本地截图。
-- Global API Key 权限很高，建议只把面板部署在可信网络或额外加访问控制。
-- 浏览器只保存随机会话 ID。Cloudflare API Key、面板密码和 `AUTH` 不写入 Cookie、localStorage、sessionStorage、前端响应体或操作历史。
-- 会话 Cookie 默认 30 天过期，`SESSION_TTL_DAYS` 最大也会被限制为 30 天。Node 进程重启后，内存会话会丢失，用户需要重新登录。
-- 生产环境请使用 HTTPS。`NODE_ENV=production` 或 `SECURE_COOKIES=true` 会让会话 Cookie 带 `Secure`，HTTP 明文访问时浏览器不会保存这类 Cookie。
-- 面板内 DNS 删除、证书删除、Worker 部署、自动优化、一键加速等操作会影响真实 Cloudflare 资源。
-- 操作历史当前保存在 Node 进程内存中，服务重启后会清空，不适合作为长期审计系统。
-- 上传自定义证书、Worker Secret、Tunnel Token 等敏感数据时，服务端不应把请求体写入操作历史或日志。
-
-## 常见问题
-
-### 没有 npm 命令
-
-项目没有第三方依赖，可以直接运行：
-
-```bash
-node src/server.js
-```
-
-### 端口已被占用
-
-```bash
-lsof -nP -iTCP:3000 -sTCP:LISTEN
-kill <pid>
-```
-
-或者换端口：
-
-```bash
-PORT=3003 node src/server.js
-```
-
-### 提示未配置面板登录
-
-检查 `.env` 或平台环境变量是否同时填写：
-
-```bash
-USER=...
-PASSWORD=...
-AUTH=...
-```
-
-修改 `.env` 后需要重启 Node 进程。
-
-### 提示缺少 Cloudflare 凭据
-
-检查至少一组账号是否同时填写：
-
-```bash
-EMAIL1=...
-CF_API1=...
-```
-
-### 前端登录后提示 Cookie 保存失败
-
-确认：
-
-- 浏览器允许当前站点保存 Cookie。
-- 如果是生产环境或开启了 `SECURE_COOKIES=true`，必须通过 HTTPS 访问面板。
-- 反向代理保留 `X-Forwarded-Proto`，并正确把 HTTPS 请求转发给 Node 服务。
-- 退出登录后重新输入用户名、密码和 2FA 验证码。
-
-### Cloudflare API 返回 403 或认证失败
-
-确认：
-
-- `EMAILn` 和 `CF_APIn` 属于同一个 Cloudflare 账号。
-- Global API Key 没有复制多余空格。
-- 账号对目标 Zone、Workers、Pages、R2、KV、D1、Tunnels 等资源有权限。
-
-### 页面能打开但列表为空
-
-先检查浏览器控制台和服务端日志，再直接访问：
-
-```bash
-curl http://127.0.0.1:3000/api/zones
-```
-
-如果接口返回 Cloudflare 错误，按错误信息修复账号权限或资源配置。
+1. 首次打开 `http://服务器IP:端口` 能进入初始化页。
+2. 未初始化时访问 `/api/zones` 返回“请先完成首次初始化”。
+3. 没有初始化口令时不能获取 2FA seed。
+4. 初始化必须输入 2FA 当前验证码。
+5. 第 2 页默认显示多行 Cloudflare 账号输入，只填有效账号行即可保存。
+6. 初始化完成后能列出 Cloudflare 域名。
+7. 不带 CSRF token 的已登录写操作返回 403。
+8. 重新创建容器并挂载同一个 volume 后，不再要求重新初始化。
+9. 清理浏览器 Cookie 后访问后台需要重新登录。

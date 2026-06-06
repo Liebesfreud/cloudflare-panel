@@ -5,6 +5,11 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import {
+  allocatePanelPort,
+  preparePanelTestEnvironment,
+} from "./helpers/panel-test-environment.js";
+
 function listen(server, port = 0) {
   server.listen(port, "127.0.0.1");
   return once(server, "listening").then(() => {
@@ -32,28 +37,10 @@ async function waitForHttp(url) {
 }
 
 function startPanel(env) {
+  const prepared = preparePanelTestEnvironment(env);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: new URL("..", import.meta.url),
-    env: {
-      ...process.env,
-      AUTH: "",
-      CF_API1: "",
-      CF_API2: "",
-      CF_API3: "",
-      CF_API_KEY: "",
-      CF_EMAIL: "",
-      CF_GLOBAL_API_KEY: "",
-      CF_PANEL_SKIP_DOTENV: "true",
-      CLOUDFLARE_API_KEY: "",
-      CLOUDFLARE_EMAIL: "",
-      CLOUDFLARE_GLOBAL_API_KEY: "",
-      EMAIL1: "",
-      EMAIL2: "",
-      EMAIL3: "",
-      PASSWORD: "",
-      USER: "",
-      ...env,
-    },
+    env: { ...process.env, ...prepared.env },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -67,6 +54,7 @@ function startPanel(env) {
     async stop() {
       child.kill();
       await once(child, "exit").catch(() => {});
+      prepared.cleanup();
     },
   };
 }
@@ -250,6 +238,7 @@ test("lists all Cloudflare zones through paginated API responses", async () => {
   const mockUrl = await listen(cloudflareMock);
   const panelPort = 3210;
   const panel = startPanel({
+    AUTH: "JBSWY3DPEHPK3PXP",
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "admin@example.com",
     CLOUDFLARE_GLOBAL_API_KEY: "global-key",
@@ -284,22 +273,183 @@ test("lists all Cloudflare zones through paginated API responses", async () => {
   }
 });
 
-test("returns a clear setup error when credentials are missing", async () => {
+test("requires first-run setup before Cloudflare APIs are available", async () => {
   const panelPort = 3211;
   const panel = startPanel({
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "",
     CLOUDFLARE_GLOBAL_API_KEY: "",
+    SETUP_TOKEN: "manual-setup-token",
   });
 
   try {
     await waitForHttp(`http://127.0.0.1:${panelPort}/`);
-    const response = await fetch(`http://127.0.0.1:${panelPort}/api/zones`);
+    const response = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      headers: { "x-panel-test-skip-auth": "true" },
+    });
     const payload = await response.json();
 
     assert.equal(response.status, 412);
-    assert.match(payload.error, /CLOUDFLARE_EMAIL/);
-    assert.match(payload.error, /CLOUDFLARE_GLOBAL_API_KEY/);
+    assert.match(payload.error, /首次初始化/);
+  } finally {
+    await panel.stop();
+  }
+});
+
+test("requires the one-time setup token before exposing TOTP setup secret", async () => {
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "",
+    CLOUDFLARE_GLOBAL_API_KEY: "",
+    SETUP_TOKEN: "protected-setup-token",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const missingTokenResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "wrong-token" }),
+    });
+    const missingTokenPayload = await missingTokenResponse.json();
+    const validTokenResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "protected-setup-token" }),
+    });
+    const validTokenPayload = await validTokenResponse.json();
+
+    assert.equal(missingTokenResponse.status, 401);
+    assert.match(missingTokenPayload.error, /初始化口令/);
+    assert.equal(Object.hasOwn(missingTokenPayload, "secret"), false);
+    assert.equal(validTokenResponse.status, 200);
+    assert.match(validTokenPayload.secret, /^[A-Z2-7 ]+$/);
+  } finally {
+    await panel.stop();
+  }
+});
+
+test("initializes admin first and then saves multiple Cloudflare accounts", async () => {
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "",
+    CLOUDFLARE_GLOBAL_API_KEY: "",
+    SETUP_TOKEN: "manual-setup-token",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const secretResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupToken: "manual-setup-token" }),
+    });
+    const secretPayload = await secretResponse.json();
+
+    assert.equal(secretResponse.status, 200);
+    assert.match(secretPayload.secret, /^[A-Z2-7 ]+$/);
+
+    const adminResponse = await fetch(`http://127.0.0.1:${panelPort}/api/setup/admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password: "strong-password",
+        setupToken: "manual-setup-token",
+        totpCode: makeTotp(secretPayload.secret),
+        totpSecret: secretPayload.secret,
+        username: "operator",
+      }),
+    });
+    const adminPayload = await adminResponse.json();
+    const sessionCookie = adminResponse.headers.get("set-cookie")?.split(";")[0] || "";
+
+    assert.equal(adminResponse.status, 201);
+    assert.equal(adminPayload.authenticated, true);
+    assert.equal(adminPayload.setupRequired, true);
+    assert.equal(adminPayload.setupState.panelUserRequired, false);
+    assert.equal(adminPayload.setupState.cloudflareAccountRequired, true);
+    assert.match(sessionCookie, /cf_panel_session=/);
+
+    const accountsResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/setup/cloudflare-accounts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+          "X-CSRF-Token": adminPayload.csrfToken,
+        },
+        body: JSON.stringify({
+          accounts: [
+            {
+              cfApiKey: "first-secret-key",
+              cfEmail: "first@example.com",
+              cloudflareName: "主账号",
+            },
+            {
+              cfApiKey: "second-secret-key",
+              cfEmail: "second@example.com",
+              cloudflareName: "备用账号",
+            },
+          ],
+        }),
+      }
+    );
+    const accountsPayload = await accountsResponse.json();
+    const serializedAccountsPayload = JSON.stringify(accountsPayload);
+
+    assert.equal(accountsResponse.status, 201);
+    assert.equal(accountsPayload.authenticated, true);
+    assert.equal(accountsPayload.setupRequired, false);
+    assert.equal(accountsPayload.hasCredentials, true);
+    assert.equal(accountsPayload.accounts.length, 2);
+    assert.equal(accountsPayload.accounts[0].email, "fi***@example.com");
+    assert.equal(accountsPayload.accounts[1].email, "se****@example.com");
+    assert.equal(serializedAccountsPayload.includes("first-secret-key"), false);
+    assert.equal(serializedAccountsPayload.includes("second-secret-key"), false);
+  } finally {
+    await panel.stop();
+  }
+});
+
+test("rejects authenticated state-changing requests without CSRF token", async () => {
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    AUTH: "JBSWY3DPEHPK3PXP",
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "admin@example.com",
+    CLOUDFLARE_GLOBAL_API_KEY: "global-key",
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+    await fetch(`http://127.0.0.1:${panelPort}/api/session/status`, {
+      headers: { "x-panel-test-prepare": "true" },
+    });
+
+    const loginResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auth: makeTotp("JBSWY3DPEHPK3PXP"),
+        password: "strong-password",
+        user: "operator",
+      }),
+    });
+    const sessionCookie = loginResponse.headers.get("set-cookie")?.split(";")[0] || "";
+    const blockedResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/logout`, {
+      method: "POST",
+      headers: { Cookie: sessionCookie },
+    });
+    const blockedPayload = await blockedResponse.json();
+
+    assert.equal(loginResponse.status, 200);
+    assert.equal(blockedResponse.status, 403);
+    assert.match(blockedPayload.error, /CSRF/);
   } finally {
     await panel.stop();
   }
@@ -403,7 +553,7 @@ test("creates a Cloudflare zone from the add-domain endpoint", async () => {
   }
 });
 
-test("reports server account status without exposing the Global API Key", async () => {
+test("keeps SQLite account status hidden until panel login", async () => {
   const panelPort = 3215;
   const panel = startPanel({
     PORT: String(panelPort),
@@ -413,6 +563,9 @@ test("reports server account status without exposing the Global API Key", async 
 
   try {
     await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+    await fetch(`http://127.0.0.1:${panelPort}/api/session/status`, {
+      headers: { "x-panel-test-prepare": "true" },
+    });
 
     const statusResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/status`
@@ -420,10 +573,12 @@ test("reports server account status without exposing the Global API Key", async 
     const statusPayload = await statusResponse.json();
 
     assert.equal(statusResponse.status, 200);
-    assert.equal(statusPayload.authenticated, true);
-    assert.equal(statusPayload.hasCredentials, true);
-    assert.equal(statusPayload.email, "ad***@example.com");
-    assert.equal(statusPayload.accounts[0].email, "ad***@example.com");
+    assert.equal(statusPayload.authenticated, false);
+    assert.equal(statusPayload.hasCredentials, false);
+    assert.equal(statusPayload.email, "");
+    assert.deepEqual(statusPayload.accounts, []);
+    assert.equal(statusPayload.loginRequired, true);
+    assert.equal(statusPayload.setupRequired, false);
     assert.equal(JSON.stringify(statusPayload).includes("global-key"), false);
 
     const connectResponse = await fetch(
@@ -440,8 +595,8 @@ test("reports server account status without exposing the Global API Key", async 
     );
     const connectPayload = await connectResponse.json();
 
-    assert.equal(connectResponse.status, 412);
-    assert.match(connectPayload.error, /USER/);
+    assert.equal(connectResponse.status, 401);
+    assert.match(connectPayload.error, /用户名、密码或 2FA/);
 
     const partialConnectResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/connect`,
@@ -453,14 +608,14 @@ test("reports server account status without exposing the Global API Key", async 
     );
     const partialConnectPayload = await partialConnectResponse.json();
 
-    assert.equal(partialConnectResponse.status, 412);
-    assert.match(partialConnectPayload.error, /USER/);
+    assert.equal(partialConnectResponse.status, 400);
+    assert.match(partialConnectPayload.error, /用户名、密码和 2FA/);
   } finally {
     await panel.stop();
   }
 });
 
-test("uses panel login cookies and switches between environment Cloudflare accounts", async () => {
+test("uses panel login cookies and switches between SQLite Cloudflare accounts", async () => {
   const requests = [];
   const cloudflareMock = createServer((request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
@@ -511,6 +666,9 @@ test("uses panel login cookies and switches between environment Cloudflare accou
 
   try {
     await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+    await fetch(`http://127.0.0.1:${panelPort}/api/session/status`, {
+      headers: { "x-panel-test-prepare": "true" },
+    });
 
     const initialStatusResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/status`
@@ -521,11 +679,14 @@ test("uses panel login cookies and switches between environment Cloudflare accou
     assert.equal(initialStatusPayload.hasCredentials, false);
     assert.equal(initialStatusPayload.authenticated, false);
     assert.equal(initialStatusPayload.loginRequired, true);
+    assert.equal(initialStatusPayload.setupRequired, false);
     assert.deepEqual(initialStatusPayload.accounts, []);
     assert.equal(JSON.stringify(initialStatusPayload).includes("first@example.com"), false);
     assert.equal(JSON.stringify(initialStatusPayload).includes("first-secret-key"), false);
 
-    const noCookieZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`);
+    const noCookieZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      headers: { "x-panel-test-skip-auth": "true" },
+    });
     const noCookieZonesPayload = await noCookieZonesResponse.json();
 
     assert.equal(noCookieZonesResponse.status, 401);
@@ -551,10 +712,12 @@ test("uses panel login cookies and switches between environment Cloudflare accou
     assert.equal(connectPayload.authenticated, true);
     assert.equal(connectPayload.hasCredentials, true);
     assert.equal(connectPayload.email, "fi***@example.com");
-    assert.equal(connectPayload.activeCloudflareAccount.id, "cf1");
+    assert.match(connectPayload.activeCloudflareAccount.id, /^cf_/);
     assert.equal(connectPayload.accounts.length, 2);
     assert.equal(connectPayload.accounts[0].email, "fi***@example.com");
     assert.equal(connectPayload.accounts[1].email, "se****@example.com");
+    const firstAccountId = connectPayload.accounts[0].id;
+    const secondAccountId = connectPayload.accounts[1].id;
     assert.equal(connectPayload.source, "cookie");
     assert.match(connectPayload.expiresAt, /T/);
     assert.match(setCookie, /cf_panel_session=/);
@@ -579,7 +742,7 @@ test("uses panel login cookies and switches between environment Cloudflare accou
     assert.equal(cookieStatusPayload.hasCredentials, true);
     assert.equal(cookieStatusPayload.email, "fi***@example.com");
     assert.equal(cookieStatusPayload.source, "cookie");
-    assert.equal(cookieStatusPayload.activeCloudflareAccount.id, "cf1");
+    assert.equal(cookieStatusPayload.activeCloudflareAccount.id, firstAccountId);
     assert.equal(JSON.stringify(cookieStatusPayload).includes("first-secret-key"), false);
 
     const zonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
@@ -591,16 +754,19 @@ test("uses panel login cookies and switches between environment Cloudflare accou
     assert.equal(zonesPayload.zones[0].id, "first-zone");
 
     const switchResponse = await fetch(
-      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts/cf2/select`,
+      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts/${secondAccountId}/select`,
       {
         method: "POST",
-        headers: { Cookie: sessionCookie },
+        headers: {
+          Cookie: sessionCookie,
+          "X-CSRF-Token": connectPayload.csrfToken,
+        },
       }
     );
     const switchPayload = await switchResponse.json();
 
     assert.equal(switchResponse.status, 200);
-    assert.equal(switchPayload.activeCloudflareAccount.id, "cf2");
+    assert.equal(switchPayload.activeCloudflareAccount.id, secondAccountId);
     assert.equal(switchPayload.email, "se****@example.com");
     assert.equal(JSON.stringify(switchPayload).includes("second-secret-key"), false);
 
@@ -632,7 +798,10 @@ test("uses panel login cookies and switches between environment Cloudflare accou
 
     const logoutResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/logout`, {
       method: "POST",
-      headers: { Cookie: sessionCookie },
+      headers: {
+        Cookie: sessionCookie,
+        "X-CSRF-Token": connectPayload.csrfToken,
+      },
     });
     const logoutPayload = await logoutResponse.json();
     const clearCookie = logoutResponse.headers.get("set-cookie") || "";

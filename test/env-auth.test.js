@@ -1,117 +1,138 @@
-import { createHmac } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createConfig } from "../src/config/env.js";
-import { PanelAuthService } from "../src/services/panel-auth-service.js";
+import { PanelAuthService, generateTotpSecret } from "../src/services/panel-auth-service.js";
+import { SqliteStore } from "../src/services/sqlite-store.js";
+import { makeTotp } from "./helpers/panel-test-environment.js";
 
-function base32Decode(input) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const bytes = [];
-  let bits = 0;
-  let value = 0;
+async function withStore(callback) {
+  const dir = await mkdtemp(join(tmpdir(), "cf-panel-auth-"));
+  const store = new SqliteStore({ databasePath: join(dir, "panel.sqlite") });
 
-  for (const char of String(input).toUpperCase().replace(/[\s=-]/g, "")) {
-    const index = alphabet.indexOf(char);
-
-    if (index === -1) {
-      throw new Error("Invalid base32 character");
-    }
-
-    value = (value << 5) | index;
-    bits += 5;
-
-    if (bits >= 8) {
-      bytes.push((value >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
+  try {
+    return await callback(store);
+  } finally {
+    store.close();
+    await rm(dir, { force: true, recursive: true });
   }
-
-  return Buffer.from(bytes);
 }
 
-function makeTotp(secret, now = Date.now()) {
-  const counter = Math.floor(now / 1000 / 30);
-  const counterBuffer = Buffer.alloc(8);
-  counterBuffer.writeBigUInt64BE(BigInt(counter));
-
-  const hmac = createHmac("sha1", base32Decode(secret)).update(counterBuffer).digest();
-  const offset = hmac[hmac.length - 1] & 0x0f;
-  const binary =
-    ((hmac[offset] & 0x7f) << 24) |
-    ((hmac[offset + 1] & 0xff) << 16) |
-    ((hmac[offset + 2] & 0xff) << 8) |
-    (hmac[offset + 3] & 0xff);
-
-  return String(binary % 1_000_000).padStart(6, "0");
-}
-
-test("createConfig collects numbered Cloudflare account environment variables in order", () => {
+test("createConfig keeps sensitive account material out of environment parsing", () => {
   const config = createConfig({
     AUTH: "JBSWY3DPEHPK3PXP",
     CF_API1: "first-key",
-    CF_API2: "second-key",
-    CF_API10: "tenth-key",
-    CF_NAME2: "备用账号",
+    DATA_DIR: "/var/lib/network",
     EMAIL1: "first@example.com",
-    EMAIL2: "second@example.com",
-    EMAIL10: "tenth@example.com",
     PASSWORD: "panel-password",
+    PORT: "3100",
     USER: "panel-user",
   });
 
-  assert.deepEqual(
-    config.cloudflare.accounts.map((account) => [account.id, account.email, account.globalApiKey, account.name]),
-    [
-      ["cf1", "first@example.com", "first-key", "Cloudflare 1"],
-      ["cf2", "second@example.com", "second-key", "备用账号"],
-      ["cf10", "tenth@example.com", "tenth-key", "Cloudflare 10"],
-    ]
-  );
-  assert.equal(config.cloudflare.email, "first@example.com");
-  assert.equal(config.cloudflare.globalApiKey, "first-key");
-  assert.deepEqual(config.auth, {
-    authSecret: "JBSWY3DPEHPK3PXP",
-    password: "panel-password",
-    user: "panel-user",
-  });
+  assert.equal(config.server.port, 3100);
+  assert.equal(config.database.path, "/var/lib/network/panel.sqlite");
+  assert.equal(Object.hasOwn(config, "auth"), false);
+  assert.equal(Object.hasOwn(config.cloudflare, "accounts"), false);
+  assert.equal(Object.hasOwn(config.cloudflare, "email"), false);
+  assert.equal(Object.hasOwn(config.cloudflare, "globalApiKey"), false);
 });
 
-test("createConfig does not treat inherited shell USER as configured panel login", () => {
-  const config = createConfig({
-    AUTH: "",
-    CF_PANEL_LOCAL_ENV_KEYS: "PASSWORD,AUTH",
-    PASSWORD: "panel-password",
-    USER: "shell-user",
-  });
-
-  assert.equal(config.auth.user, "");
-  assert.equal(config.auth.password, "panel-password");
-  assert.equal(config.auth.authSecret, "");
-});
-
-test("PanelAuthService verifies TOTP login without accepting wrong credentials", () => {
-  const secret = "JBSWY3DPEHPK3PXP";
-  const service = new PanelAuthService({
-    authSecret: secret,
-    password: "panel-password",
-    user: "panel-user",
-  });
-
-  assert.equal(
-    service.verify({
-      auth: makeTotp(secret),
+test("PanelAuthService creates SQLite setup and verifies TOTP login", async () => {
+  await withStore((store) => {
+    const secret = generateTotpSecret();
+    const service = new PanelAuthService({ store });
+    const result = service.createSetup({
+      cfApiKey: "global-key-for-sqlite-storage",
+      cfEmail: "first@example.com",
+      cloudflareName: "主账号",
       password: "panel-password",
-      user: "panel-user",
-    }),
-    true
-  );
-  assert.equal(
-    service.verify({
-      auth: makeTotp(secret),
-      password: "wrong-password",
-      user: "panel-user",
-    }),
-    false
-  );
+      totpCode: makeTotp(secret),
+      totpSecret: secret,
+      username: "operator",
+    });
+
+    assert.equal(result.statusCode, 201);
+    const rawPanelUser = store.database.prepare("SELECT totp_secret FROM panel_user WHERE id = 1").get();
+    const rawAccount = store.database.prepare("SELECT global_api_key FROM cloudflare_accounts LIMIT 1").get();
+
+    assert.match(rawPanelUser.totp_secret, /^enc:v1:/);
+    assert.match(rawAccount.global_api_key, /^enc:v1:/);
+    assert.notEqual(rawPanelUser.totp_secret, secret.replace(/\s+/g, ""));
+    assert.notEqual(rawAccount.global_api_key, "global-key-for-sqlite-storage");
+    assert.equal(service.isConfigured(), true);
+    assert.equal(store.hasCloudflareAccounts(), true);
+    assert.equal(store.getCloudflareAccount().email, "first@example.com");
+    assert.equal(store.getCloudflareAccount().globalApiKey, "global-key-for-sqlite-storage");
+    assert.equal(
+      service.verify({
+        auth: makeTotp(secret),
+        password: "panel-password",
+        user: "operator",
+      }),
+      true
+    );
+    assert.equal(
+      service.verify({
+        auth: makeTotp(secret),
+        password: "wrong-password",
+        user: "operator",
+      }),
+      false
+    );
+  });
+});
+
+test("PanelAuthService ignores empty preset Cloudflare account rows during setup", async () => {
+  await withStore((store) => {
+    const secret = generateTotpSecret();
+    const service = new PanelAuthService({ store });
+    const userResult = service.createPanelUserSetup({
+      password: "panel-password",
+      totpCode: makeTotp(secret),
+      totpSecret: secret,
+      username: "operator",
+    });
+    const accountResult = service.createCloudflareAccountsSetup({
+      accounts: [
+        {
+          cfApiKey: "global-key-for-sqlite-storage",
+          cfEmail: "first@example.com",
+          cloudflareName: "主账号",
+        },
+        {
+          cfApiKey: "",
+          cfEmail: "",
+          cloudflareName: "备用账号",
+        },
+      ],
+    });
+
+    assert.equal(userResult.statusCode, 201);
+    assert.equal(accountResult.statusCode, 201);
+    assert.equal(accountResult.accounts.length, 1);
+    assert.equal(store.listCloudflareAccounts().length, 1);
+    assert.equal(store.getCloudflareAccount().email, "first@example.com");
+  });
+});
+
+test("PanelAuthService rejects setup without mandatory 2FA confirmation", async () => {
+  await withStore((store) => {
+    const service = new PanelAuthService({ store });
+    const result = service.createSetup({
+      cfApiKey: "global-key-for-sqlite-storage",
+      cfEmail: "first@example.com",
+      password: "panel-password",
+      totpCode: "123456",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+      username: "operator",
+    });
+
+    assert.equal(result.statusCode, 400);
+    assert.match(result.error, /2FA/);
+    assert.equal(store.hasPanelUser(), false);
+    assert.equal(store.hasCloudflareAccounts(), false);
+  });
 });

@@ -1,6 +1,6 @@
 function matchRoute(method, pathname) {
   const cloudflareAccountSelectMatch = pathname.match(
-    /^\/api\/session\/cloudflare-accounts\/(?<accountId>cf\d+)\/select$/i
+    /^\/api\/session\/cloudflare-accounts\/(?<accountId>[a-z0-9_-]{1,96})\/select$/i
   );
 
   if (cloudflareAccountSelectMatch) {
@@ -535,6 +535,49 @@ function matchRoute(method, pathname) {
   return { key: `${method} ${pathname}`, params: {} };
 }
 
+const csrfExemptRoutes = new Set([
+  "POST /api/session/connect",
+  "POST /api/setup/secret",
+  "POST /api/setup/admin",
+  "POST /api/setup/complete",
+]);
+
+const stateChangingMethods = new Set(["DELETE", "PATCH", "POST", "PUT"]);
+
+function requestOrigin(request) {
+  const host = String(request?.headers?.host || "").trim();
+
+  if (!host) {
+    return "";
+  }
+
+  const proto = String(request?.headers?.["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim() || "http";
+
+  return `${proto}://${host}`;
+}
+
+function sameOriginRequest(request) {
+  const expectedOrigin = requestOrigin(request);
+  const origin = String(request?.headers?.origin || "").trim();
+  const referer = String(request?.headers?.referer || "").trim();
+
+  if (origin) {
+    return origin === expectedOrigin;
+  }
+
+  if (referer) {
+    try {
+      return new URL(referer).origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function createApiRouter({
   analyticsController,
   automationController,
@@ -557,6 +600,11 @@ export function createApiRouter({
   zonesController,
 }) {
   const routes = new Map([
+    ["GET /api/setup/status", credentialsController.setupStatus],
+    ["POST /api/setup/secret", credentialsController.setupSecret],
+    ["POST /api/setup/admin", credentialsController.createSetupAdmin],
+    ["POST /api/setup/cloudflare-accounts", credentialsController.createSetupCloudflareAccounts],
+    ["POST /api/setup/complete", credentialsController.completeSetup],
     ["GET /api/session/status", credentialsController.status],
     ["POST /api/session/connect", credentialsController.connect],
     ["POST /api/session/logout", credentialsController.logout],
@@ -710,7 +758,9 @@ export function createApiRouter({
         const startedAt = Date.now();
         const sessionCredentials = credentialSessionService?.getCredentials(context.request);
         const isSessionRoute = context.url.pathname.startsWith("/api/session/");
-        const requiresPanelLogin = panelAuthService?.isConfigured() && !isSessionRoute;
+        const isSetupRoute = context.url.pathname.startsWith("/api/setup/");
+        const setupRequired = Boolean(panelAuthService?.getSetupState?.().setupRequired);
+        const requiresPanelLogin = !setupRequired && panelAuthService?.isConfigured() && !isSessionRoute && !isSetupRoute;
         const selectedAccountId = cloudflareAccountService?.resolveSelectedAccountId(
           sessionCredentials?.activeCloudflareAccountId
         );
@@ -725,10 +775,36 @@ export function createApiRouter({
         const executeHandler = () => handler({ ...context, credentials, params: match.params });
 
         try {
+          if (setupRequired && !isSessionRoute && !isSetupRoute) {
+            return {
+              statusCode: 412,
+              body: { error: "请先完成首次初始化。" },
+            };
+          }
+
           if (requiresPanelLogin && !sessionCredentials?.authenticated) {
             return {
               statusCode: 401,
               body: { error: "请先登录面板。" },
+            };
+          }
+
+          if (stateChangingMethods.has(context.request.method) && !sameOriginRequest(context.request)) {
+            return {
+              statusCode: 403,
+              body: { error: "请求来源校验失败。" },
+            };
+          }
+
+          if (
+            sessionCredentials?.authenticated &&
+            stateChangingMethods.has(context.request.method) &&
+            !csrfExemptRoutes.has(match.key) &&
+            !credentialSessionService.verifyCsrf(context.request)
+          ) {
+            return {
+              statusCode: 403,
+              body: { error: "CSRF 校验失败，请刷新页面后重试。" },
             };
           }
 

@@ -10,13 +10,13 @@ import {
 import { state } from "../public/js/state.js";
 
 function htmlResponse() {
-  return new Response("<!doctype html><html><body>GitHub Pages fallback</body></html>", {
+  return new Response("<!doctype html><html><body>Static HTML fallback</body></html>", {
     headers: { "Content-Type": "text/html; charset=utf-8" },
     status: 200,
   });
 }
 
-test("front-end API reports non-JSON static Pages responses as backend unavailable", async () => {
+test("front-end API reports non-JSON static HTML responses as backend unavailable", async () => {
   const previousFetch = global.fetch;
   const requestedUrls = [];
   global.fetch = async (url) => {
@@ -81,7 +81,7 @@ test("DNS bulk text parser supports quoted TXT content and MX shorthand", () => 
   );
 });
 
-test("session startup keeps the GitHub Pages login screen clean when API is static HTML", async () => {
+test("session startup keeps the login screen clean when API is static HTML", async () => {
   const previousFetch = global.fetch;
   let loadZonesCalled = false;
   let renderCount = 0;
@@ -118,7 +118,7 @@ test("session startup keeps the GitHub Pages login screen clean when API is stat
   }
 });
 
-test("manual login still tells static Pages users that the Node backend is missing", async () => {
+test("manual login still tells static HTML users that the Node backend is missing", async () => {
   const previousDocument = global.document;
   const previousFetch = global.fetch;
   const previousFormData = global.FormData;

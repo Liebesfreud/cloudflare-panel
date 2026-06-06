@@ -16,7 +16,6 @@ const moduleMatchers = [
   [/^\/api\/developer-resources\/r2/i, "R2 存储桶"],
   [/^\/api\/developer-resources\/kv/i, "Workers KV"],
   [/^\/api\/developer-resources\/tunnels/i, "Cloudflare Tunnels"],
-  [/^\/api\/session\//i, "账号连接"],
 ];
 
 const actionLabels = {
@@ -94,7 +93,9 @@ export class OperationHistoryService {
     return (
       mutatingMethods.has(String(method || "").toUpperCase()) &&
       pathname.startsWith("/api/") &&
-      !pathname.startsWith("/api/operation-history")
+      !pathname.startsWith("/api/operation-history") &&
+      !pathname.startsWith("/api/session/") &&
+      !pathname.startsWith("/api/setup/")
     );
   }
 

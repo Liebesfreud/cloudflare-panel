@@ -602,6 +602,10 @@ export class DeveloperResourcesService {
   }
 
   async queryD1(accountId = "", databaseId = "", input = {}) {
+    return this.executeD1Query(accountId, databaseId, input);
+  }
+
+  async executeD1Query(accountId = "", databaseId = "", input = {}) {
     const resolved = await this.resolveAccountId(accountId);
     assertCloudflareResourceId(databaseId, "D1 数据库 ID");
     const sql = String(input.sql || "").trim();
@@ -627,7 +631,7 @@ export class DeveloperResourcesService {
   }
 
   async listD1Tables(accountId, databaseId) {
-    const payload = await this.queryD1(accountId, databaseId, {
+    const payload = await this.executeD1Query(accountId, databaseId, {
       sql: "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     });
 

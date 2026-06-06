@@ -331,6 +331,9 @@ function renderD1Detail(detail) {
   const results = detail.extras?.queryResults || [];
 
   return `
+    <div class="devres-notice">
+      D1 SQL 控制台默认关闭；需要时由部署者设置 ENABLE_D1_SQL_CONSOLE=true 后再执行任意 SQL。
+    </div>
     <form class="devres-detail-form" id="d1-query-form">
       <label class="devres-field">
         <span>SQL 查询</span>

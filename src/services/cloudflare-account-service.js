@@ -9,7 +9,11 @@ function maskEmail(email) {
   return `${visible}${"*".repeat(Math.max(3, name.length - visible.length))}@${domain}`;
 }
 
-function normalizeAccount(account, index) {
+function normalizeAccount(account) {
+  if (!account) {
+    return null;
+  }
+
   const email = String(account.email || "").trim();
   const globalApiKey = String(account.globalApiKey || "").trim();
 
@@ -17,8 +21,12 @@ function normalizeAccount(account, index) {
     return null;
   }
 
-  const id = String(account.id || `cf${index + 1}`).trim();
+  const id = String(account.id || "").trim();
   const name = String(account.name || account.label || "").trim();
+
+  if (!id) {
+    return null;
+  }
 
   return {
     email,
@@ -32,19 +40,20 @@ function normalizeAccount(account, index) {
 export { maskEmail };
 
 export class CloudflareAccountService {
-  constructor({ accounts = [] } = {}) {
-    this.accounts = accounts
-      .map((account, index) => normalizeAccount(account, index))
-      .filter(Boolean);
-    this.accountMap = new Map(this.accounts.map((account) => [account.id, account]));
+  constructor({ store } = {}) {
+    this.store = store;
+  }
+
+  listAccounts() {
+    return (this.store?.listCloudflareAccounts() || []).map(normalizeAccount).filter(Boolean);
   }
 
   hasAccounts() {
-    return this.accounts.length > 0;
+    return Boolean(this.store?.hasCloudflareAccounts());
   }
 
   listSafe(activeAccountId = "") {
-    return this.accounts.map((account) => ({
+    return this.listAccounts().map((account) => ({
       active: account.id === activeAccountId,
       email: maskEmail(account.email),
       id: account.id,
@@ -54,19 +63,19 @@ export class CloudflareAccountService {
   }
 
   getDefaultAccount() {
-    return this.accounts[0] || null;
+    return normalizeAccount(this.store?.getCloudflareAccount()) || null;
   }
 
   getAccount(accountId = "") {
-    if (accountId && this.accountMap.has(accountId)) {
-      return this.accountMap.get(accountId);
+    if (accountId) {
+      return normalizeAccount(this.store?.getCloudflareAccount(accountId));
     }
 
     return this.getDefaultAccount();
   }
 
   findAccount(accountId = "") {
-    return accountId ? this.accountMap.get(accountId) || null : null;
+    return accountId ? normalizeAccount(this.store?.getCloudflareAccount(accountId)) : null;
   }
 
   hasAccount(accountId = "") {
@@ -104,7 +113,7 @@ export class CloudflareAccountService {
   }
 
   resolveSelectedAccountId(accountId = "") {
-    if (accountId && this.accountMap.has(accountId)) {
+    if (accountId && this.hasAccount(accountId)) {
       return accountId;
     }
 
