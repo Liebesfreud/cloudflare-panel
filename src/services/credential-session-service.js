@@ -69,13 +69,15 @@ export class CredentialSessionService {
     this.sessions = new Map();
   }
 
-  create({ email, globalApiKey, source = "browser" }) {
+  create({ activeCloudflareAccountId = "", authenticated = false, email = "", globalApiKey = "", source = "browser" }) {
     this.pruneExpired();
 
     const id = randomBytes(32).toString("base64url");
     const createdAtMs = this.now();
     const expiresAtMs = createdAtMs + this.maxAgeSeconds * 1000;
     const session = {
+      activeCloudflareAccountId,
+      authenticated: Boolean(authenticated),
       createdAt: new Date(createdAtMs).toISOString(),
       email,
       expiresAt: new Date(expiresAtMs).toISOString(),
@@ -118,6 +120,8 @@ export class CredentialSessionService {
     }
 
     return {
+      activeCloudflareAccountId: session.activeCloudflareAccountId || "",
+      authenticated: Boolean(session.authenticated),
       email: session.email,
       expiresAt: session.expiresAt,
       globalApiKey: session.globalApiKey,
@@ -134,6 +138,24 @@ export class CredentialSessionService {
     }
 
     return Boolean(sessionId);
+  }
+
+  update(request, updates = {}) {
+    const session = this.resolve(request);
+
+    if (!session) {
+      return null;
+    }
+
+    if (Object.hasOwn(updates, "activeCloudflareAccountId")) {
+      session.activeCloudflareAccountId = String(updates.activeCloudflareAccountId || "");
+    }
+
+    if (Object.hasOwn(updates, "authenticated")) {
+      session.authenticated = Boolean(updates.authenticated);
+    }
+
+    return session;
   }
 
   createCookie(request, session) {

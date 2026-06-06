@@ -5,6 +5,7 @@ const supportedRecordTypes = new Set(["A", "AAAA", "CNAME", "TXT", "MX", "NS"]);
 const proxiableRecordTypes = new Set(["A", "AAAA", "CNAME"]);
 const zoneIdPattern = /^[a-z0-9]{32}$/i;
 const recordIdPattern = /^[a-z0-9]{32}$/i;
+const maxBulkRecords = 100;
 
 function assertCloudflareId(value, label, pattern = zoneIdPattern) {
   if (!pattern.test(String(value || ""))) {
@@ -133,6 +134,26 @@ export class DnsRecordsService {
     return normalizeDnsRecord(payload.result);
   }
 
+  async createRecords(zoneId, inputs = []) {
+    assertCloudflareId(zoneId, "区域 ID");
+
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      throw new HttpError(400, "请至少提供一条 DNS 记录");
+    }
+
+    if (inputs.length > maxBulkRecords) {
+      throw new HttpError(400, `单次最多批量添加 ${maxBulkRecords} 条 DNS 记录`);
+    }
+
+    const records = [];
+
+    for (const input of inputs) {
+      records.push(await this.createRecord(zoneId, input));
+    }
+
+    return records;
+  }
+
   async updateRecord(zoneId, recordId, input) {
     assertCloudflareId(zoneId, "区域 ID");
     assertCloudflareId(recordId, "DNS 记录 ID", recordIdPattern);
@@ -152,5 +173,31 @@ export class DnsRecordsService {
     );
 
     return { id: payload.result?.id || recordId };
+  }
+
+  async deleteRecords(zoneId, recordIds = []) {
+    assertCloudflareId(zoneId, "区域 ID");
+
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+      throw new HttpError(400, "请选择要删除的 DNS 记录");
+    }
+
+    if (recordIds.length > maxBulkRecords) {
+      throw new HttpError(400, `单次最多批量删除 ${maxBulkRecords} 条 DNS 记录`);
+    }
+
+    const uniqueRecordIds = [...new Set(recordIds.map((recordId) => String(recordId || "").trim()))];
+
+    for (const recordId of uniqueRecordIds) {
+      assertCloudflareId(recordId, "DNS 记录 ID", recordIdPattern);
+    }
+
+    const deleted = [];
+
+    for (const recordId of uniqueRecordIds) {
+      deleted.push(await this.deleteRecord(zoneId, recordId));
+    }
+
+    return deleted;
   }
 }

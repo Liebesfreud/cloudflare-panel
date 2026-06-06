@@ -1,4 +1,4 @@
-import { fetchZones } from "../api.js";
+import { createZone, fetchZones } from "../api.js";
 import { routeToZone, updateRoute } from "../router.js";
 import { state } from "../state.js";
 
@@ -30,17 +30,37 @@ export function createDomainActions({ loadZoneSectionData, renderApp, showNotice
     }
   }
 
-  function addDomain(event) {
+  async function addDomain(event) {
     event.preventDefault();
     const input = document.querySelector("#domain-input");
     const domain = input.value.trim().toLowerCase();
+    state.domainDraft = domain;
 
     if (!domain) {
       showNotice("请输入要添加的域名");
       return;
     }
 
-    showNotice("添加域名功能待接入，当前版本先只读取账号域名列表");
+    state.addingDomain = true;
+    state.notice = "";
+    renderApp();
+
+    try {
+      const zone = await createZone({
+        name: domain,
+        type: "full",
+        jumpStart: false,
+      });
+
+      state.domainDraft = "";
+      state.notice = `${zone.name || domain} 已提交到 Cloudflare`;
+      await loadZones({ throwOnError: false });
+    } catch (error) {
+      state.notice = error.message;
+    } finally {
+      state.addingDomain = false;
+      renderApp();
+    }
   }
 
   function openMainSection(section) {

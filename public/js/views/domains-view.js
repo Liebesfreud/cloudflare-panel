@@ -9,7 +9,7 @@ function renderDomainRows() {
       <div class="empty-state">
         <div class="spinner"></div>
         <strong>正在读取 Cloudflare 域名</strong>
-        <span>通过 Global API Key 拉取当前账号所有 Zone。</span>
+        <span>正在拉取当前选中账号的所有 Zone。</span>
       </div>
     `;
   }
@@ -26,7 +26,7 @@ function renderDomainRows() {
   if (state.zones.length === 0) {
     return `
       <div class="empty-state">
-        <strong>当前账号暂无域名</strong>
+        <strong>当前选中账号暂无域名</strong>
         <span>添加到 Cloudflare 后会显示在这里。</span>
       </div>
     `;
@@ -81,12 +81,12 @@ export function renderDomainsView() {
         </div>
         <div class="add-row">
           <div class="field">
-            <input id="domain-input" name="domain" autocomplete="off" spellcheck="false" placeholder="example.com" />
+            <input id="domain-input" name="domain" autocomplete="off" spellcheck="false" placeholder="example.com" value="${escapeHtml(state.domainDraft)}" ${state.addingDomain ? "disabled" : ""} />
             <p>输入您想要添加到 Cloudflare 的域名（不包含 www 或其他子域名）</p>
           </div>
-          <button class="primary-button" type="submit">
+          <button class="primary-button" type="submit" ${state.addingDomain ? "disabled" : ""}>
             ${icon("plus")}
-            <span>添加域名</span>
+            <span>${state.addingDomain ? "添加中" : "添加域名"}</span>
           </button>
         </div>
         ${state.notice ? `<div class="notice">${escapeHtml(state.notice)}</div>` : ""}

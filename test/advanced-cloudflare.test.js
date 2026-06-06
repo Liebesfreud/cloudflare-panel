@@ -35,6 +35,20 @@ function startPanel(env) {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
+      AUTH: "",
+      CF_API1: "",
+      CF_API2: "",
+      CF_API_KEY: "",
+      CF_EMAIL: "",
+      CF_GLOBAL_API_KEY: "",
+      CF_PANEL_SKIP_DOTENV: "true",
+      CLOUDFLARE_API_KEY: "",
+      CLOUDFLARE_EMAIL: "",
+      CLOUDFLARE_GLOBAL_API_KEY: "",
+      EMAIL1: "",
+      EMAIL2: "",
+      PASSWORD: "",
+      USER: "",
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -109,7 +123,7 @@ function createAdvancedMock({ zoneId, requests }) {
 
     if (request.method === "GET" && settingMatch) {
       const values = {
-        ssl: "flexible",
+        ssl: "strict",
         always_use_https: "off",
         automatic_https_rewrites: "on",
         min_tls_version: "1.2",
@@ -284,7 +298,7 @@ test("manages SSL settings, certificates, rulesets, and accelerated domain inven
     const sslResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones/${zoneId}/ssl-settings`);
     const sslPayload = await sslResponse.json();
     assert.equal(sslResponse.status, 200);
-    assert.equal(sslPayload.ssl.settings.ssl.value, "flexible");
+    assert.equal(sslPayload.ssl.settings.ssl.value, "strict");
     assert.equal(sslPayload.ssl.settings.alwaysUseHttps.value, false);
 
     const sslPatchResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones/${zoneId}/ssl-settings`, {

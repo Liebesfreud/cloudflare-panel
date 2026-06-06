@@ -35,6 +35,20 @@ function startPanel(env) {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
+      AUTH: "",
+      CF_API1: "",
+      CF_API2: "",
+      CF_API_KEY: "",
+      CF_EMAIL: "",
+      CF_GLOBAL_API_KEY: "",
+      CF_PANEL_SKIP_DOTENV: "true",
+      CLOUDFLARE_API_KEY: "",
+      CLOUDFLARE_EMAIL: "",
+      CLOUDFLARE_GLOBAL_API_KEY: "",
+      EMAIL1: "",
+      EMAIL2: "",
+      PASSWORD: "",
+      USER: "",
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -296,7 +310,7 @@ test("deploys one-click acceleration through Cloudflare SaaS APIs", async () => 
     assert.equal(payload.deployment.accessRecord.content, "saas.sin.fan");
     assert.equal(payload.deployment.fallbackRecord.name, "saas.alpha.example");
     assert.equal(payload.deployment.fallbackOrigin.origin, "saas.alpha.example");
-    assert.equal(payload.deployment.sslSetting.value, "flexible");
+    assert.equal(payload.deployment.sslSetting.value, "strict");
 
     assert.deepEqual(
       cloudflareMock.requests.map((request) => [request.method, request.path]),
@@ -327,7 +341,7 @@ test("deploys one-click acceleration through Cloudflare SaaS APIs", async () => 
       proxied: true,
       comment: "一键加速回退源",
     });
-    assert.deepEqual(cloudflareMock.requests[3].body, { value: "flexible" });
+    assert.deepEqual(cloudflareMock.requests[3].body, { value: "strict" });
     assert.deepEqual(cloudflareMock.requests[4].body, {
       origin: "saas.alpha.example",
     });

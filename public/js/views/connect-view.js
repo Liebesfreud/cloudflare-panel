@@ -2,74 +2,53 @@ import { icon } from "../icons.js";
 import { state } from "../state.js";
 import { escapeHtml } from "../utils.js";
 
-function renderSavedAccount() {
-  if (!state.sessionHasServerCredentials) {
-    return "";
-  }
-
-  const isCookieSession = state.sessionSource === "cookie";
-  const savedLabel = isCookieSession
-    ? "已保存浏览器登录，会话最长保留 30 天"
-    : "已从本地服务端检测到 Cloudflare 凭据";
-
-  return `
-    <div class="saved-account">
-      <div>
-        <strong>${escapeHtml(state.sessionEmail || "已配置服务端凭据")}</strong>
-        <span>${escapeHtml(savedLabel)}</span>
-      </div>
-      <button class="ghost-button" type="button" id="connect-with-server-credentials">
-        快速进入
-      </button>
-    </div>
-  `;
-}
-
 function renderConnectBody() {
   if (state.checkingSession) {
     return `
       <div class="connect-loading">
         <div class="spinner"></div>
-        <strong>正在检查 Cloudflare 凭据</strong>
+        <strong>正在检查面板会话</strong>
       </div>
     `;
   }
 
   return `
     <div class="connect-heading">
-      <h2>连接您的 Cloudflare 账号</h2>
-      <p>输入凭据后即可管理和使用强大的Cloudflare</p>
+      <h2>登录蜘蛛网络面板</h2>
+      <p>登录后即可选择服务端环境变量中配置的 Cloudflare 账号</p>
     </div>
-
-    ${renderSavedAccount()}
 
     <form class="connect-card" id="cloudflare-connect-form">
       <div class="connect-card-title">
-        <span>${icon("globe")}</span>
+        <span>${icon("shield")}</span>
         <div>
-          <h3>Cloudflare 凭据</h3>
-          <p>凭据仅提交到本机 Node.js 服务端，不会暴露在浏览器接口响应中。</p>
+          <h3>面板登录</h3>
+          <p>Cloudflare Global API Key 只从后端环境变量读取，不在浏览器输入或返回。</p>
         </div>
       </div>
 
       <label class="connect-field">
-        <span>Cloudflare 账号邮箱</span>
-        <input name="email" type="email" autocomplete="username" placeholder="your@email.com" />
+        <span>用户名</span>
+        <input name="user" type="text" autocomplete="username" placeholder="admin" />
       </label>
       <label class="connect-field">
-        <span>Cloudflare API 密钥</span>
-        <input name="globalApiKey" type="password" autocomplete="current-password" placeholder="您的 API 密钥" />
+        <span>密码</span>
+        <input name="password" type="password" autocomplete="current-password" placeholder="面板密码" />
       </label>
-      <p class="connect-help">点击右上角头像 -> 配置文件 -> API 令牌 -> 下拉到 API 密钥 -> 查看或创建 Global API Key</p>
+      <label class="connect-field">
+        <span>2FA 验证码</span>
+        <input name="auth" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位动态验证码" />
+      </label>
+      <p class="connect-help">服务端需配置 USER、PASSWORD、AUTH，并按 EMAIL1/CF_API1、EMAIL2/CF_API2 添加 Cloudflare 账号。</p>
 
       <div class="connect-security">
         <strong>安全保存方式</strong>
-        <span>登录后浏览器仅保存 HttpOnly 会话 Cookie，Cookie 内不包含邮箱或 Global API Key。</span>
-        <span>真实 Key 只保存在当前 Node.js 服务端会话中，最长 30 天，退出登录会立即清除。</span>
+        <span>浏览器仅保存 HttpOnly 随机会话 Cookie，最长 30 天。</span>
+        <span>Cookie、localStorage、接口响应和操作历史都不保存 Cloudflare API Key。</span>
       </div>
 
       <button class="primary-button connect-submit" type="submit" ${state.connectingSession ? "disabled" : ""}>
-        ${state.connectingSession ? "验证中..." : "验证并进入管理后台"}
+        ${state.connectingSession ? "登录中..." : "登录并进入管理后台"}
       </button>
       ${state.sessionError ? `<div class="notice error-notice">${escapeHtml(state.sessionError)}</div>` : ""}
     </form>

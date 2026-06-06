@@ -1,4 +1,15 @@
 function matchRoute(method, pathname) {
+  const cloudflareAccountSelectMatch = pathname.match(
+    /^\/api\/session\/cloudflare-accounts\/(?<accountId>cf\d+)\/select$/i
+  );
+
+  if (cloudflareAccountSelectMatch) {
+    return {
+      key: `${method} /api/session/cloudflare-accounts/:accountId/select`,
+      params: cloudflareAccountSelectMatch.groups,
+    };
+  }
+
   if (pathname === "/api/workers/queues") {
     return {
       key: `${method} /api/workers/queues`,
@@ -422,6 +433,28 @@ function matchRoute(method, pathname) {
     };
   }
 
+  const zoneDnsRecordsBulkMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/dns-records\/bulk$/i
+  );
+
+  if (zoneDnsRecordsBulkMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/dns-records/bulk`,
+      params: zoneDnsRecordsBulkMatch.groups,
+    };
+  }
+
+  const zoneDnsRecordsBulkDeleteMatch = pathname.match(
+    /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/dns-records\/bulk-delete$/i
+  );
+
+  if (zoneDnsRecordsBulkDeleteMatch) {
+    return {
+      key: `${method} /api/zones/:zoneId/dns-records/bulk-delete`,
+      params: zoneDnsRecordsBulkDeleteMatch.groups,
+    };
+  }
+
   const zoneSpeedDeployMatch = pathname.match(
     /^\/api\/zones\/(?<zoneId>[a-z0-9]{32})\/speed-deploy$/i
   );
@@ -507,6 +540,7 @@ export function createApiRouter({
   automationController,
   cacheSettingsController,
   certificatesController,
+  cloudflareAccountService,
   cloudflareClient,
   credentialsController,
   credentialSessionService,
@@ -516,6 +550,7 @@ export function createApiRouter({
   operationHistoryController,
   operationHistoryService,
   pageRulesController,
+  panelAuthService,
   speedDeployController,
   sslSettingsController,
   workersController,
@@ -525,6 +560,10 @@ export function createApiRouter({
     ["GET /api/session/status", credentialsController.status],
     ["POST /api/session/connect", credentialsController.connect],
     ["POST /api/session/logout", credentialsController.logout],
+    [
+      "POST /api/session/cloudflare-accounts/:accountId/select",
+      credentialsController.switchCloudflareAccount,
+    ],
     ["GET /api/operation-history", operationHistoryController.list],
     ["DELETE /api/operation-history", operationHistoryController.clear],
     ["GET /api/developer-resources/:type", developerResourcesController.list],
@@ -590,6 +629,7 @@ export function createApiRouter({
     ["PUT /api/workers/:scriptName/domains", workersController.createDomain],
     ["DELETE /api/workers/:scriptName/domains/:domainId", workersController.deleteDomain],
     ["GET /api/zones", zonesController.list],
+    ["POST /api/zones", zonesController.create],
     ["GET /api/zones/:zoneId/analytics", analyticsController.get],
     ["GET /api/zones/:zoneId/automation", automationController.get],
     ["PATCH /api/zones/:zoneId/automation", automationController.updateSettings],
@@ -625,6 +665,8 @@ export function createApiRouter({
     ],
     ["GET /api/zones/:zoneId/dns-records", dnsRecordsController.list],
     ["POST /api/zones/:zoneId/dns-records", dnsRecordsController.create],
+    ["POST /api/zones/:zoneId/dns-records/bulk", dnsRecordsController.createBulk],
+    ["POST /api/zones/:zoneId/dns-records/bulk-delete", dnsRecordsController.deleteBulk],
     ["PATCH /api/zones/:zoneId/dns-records/:recordId", dnsRecordsController.update],
     ["DELETE /api/zones/:zoneId/dns-records/:recordId", dnsRecordsController.delete],
     ["GET /api/zones/:zoneId/speed-deploy", speedDeployController.list],
@@ -666,10 +708,30 @@ export function createApiRouter({
 
       return async (context) => {
         const startedAt = Date.now();
-        const credentials = credentialSessionService?.getCredentials(context.request);
+        const sessionCredentials = credentialSessionService?.getCredentials(context.request);
+        const isSessionRoute = context.url.pathname.startsWith("/api/session/");
+        const requiresPanelLogin = panelAuthService?.isConfigured() && !isSessionRoute;
+        const selectedAccountId = cloudflareAccountService?.resolveSelectedAccountId(
+          sessionCredentials?.activeCloudflareAccountId
+        );
+        const cloudflareCredentials =
+          sessionCredentials?.email && sessionCredentials?.globalApiKey
+            ? sessionCredentials
+            : cloudflareAccountService?.getCredentials(selectedAccountId);
+        const credentials =
+          requiresPanelLogin && !sessionCredentials?.authenticated
+            ? null
+            : cloudflareCredentials;
         const executeHandler = () => handler({ ...context, credentials, params: match.params });
 
         try {
+          if (requiresPanelLogin && !sessionCredentials?.authenticated) {
+            return {
+              statusCode: 401,
+              body: { error: "请先登录面板。" },
+            };
+          }
+
           const result = await cloudflareClient.withCredentials(credentials, executeHandler);
 
           if (operationHistoryService?.shouldRecord(context.request.method, context.url.pathname)) {

@@ -35,6 +35,20 @@ function startPanel(env) {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
+      AUTH: "",
+      CF_API1: "",
+      CF_API2: "",
+      CF_API_KEY: "",
+      CF_EMAIL: "",
+      CF_GLOBAL_API_KEY: "",
+      CF_PANEL_SKIP_DOTENV: "true",
+      CLOUDFLARE_API_KEY: "",
+      CLOUDFLARE_EMAIL: "",
+      CLOUDFLARE_GLOBAL_API_KEY: "",
+      EMAIL1: "",
+      EMAIL2: "",
+      PASSWORD: "",
+      USER: "",
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -116,7 +130,7 @@ function makePageRule(overrides = {}) {
 function settingValue(settingId) {
   const values = {
     security_level: "medium",
-    ssl: "flexible",
+    ssl: "strict",
     always_use_https: "off",
     automatic_https_rewrites: "on",
     tls_1_3: "on",
@@ -431,7 +445,7 @@ test("applies automation speed preset and continues through readable setting map
         .map((request) => [request.path, request.body.value]),
       [
         [`/zones/${zoneId}/settings/security_level`, "low"],
-        [`/zones/${zoneId}/settings/ssl`, "flexible"],
+        [`/zones/${zoneId}/settings/ssl`, "strict"],
         [`/zones/${zoneId}/settings/cache_level`, "aggressive"],
         [`/zones/${zoneId}/settings/browser_cache_ttl`, 31_536_000],
         [`/zones/${zoneId}/settings/polish`, "lossless"],

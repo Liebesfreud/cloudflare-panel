@@ -152,6 +152,52 @@
   place-items: center;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.account-switcher {
+  display: flex;
+  min-width: 190px;
+  max-width: 260px;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  padding: 0 10px;
+}
+
+.account-switcher span {
+  display: inline-grid;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  place-items: center;
+  color: #6b7280;
+}
+
+.account-switcher select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-switcher select:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
 .logout {
   border: 0;
   background: transparent;

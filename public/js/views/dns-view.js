@@ -1,6 +1,7 @@
 import { icon } from "../icons.js";
 import { state } from "../state.js";
 import { escapeHtml, planLabel, statusLabel } from "../utils.js";
+import { renderDnsBulkForm } from "./dns-bulk-form-view.js";
 import { renderDnsForm } from "./dns-form-view.js";
 import { renderDnsRecords } from "./dns-records-view.js";
 
@@ -30,6 +31,7 @@ export function renderZoneSummary(zone, { description = "管理此域名的 DNS 
 
 export function renderDnsView() {
   const zone = state.selectedZone || { id: "", name: "", status: "", plan: null };
+  const selectedCount = state.selectedDnsRecordIds.length;
 
   return `
     ${renderZoneSummary(zone, { detail: `${state.dnsRecords.length} 条 DNS 记录` })}
@@ -40,20 +42,23 @@ export function renderDnsView() {
         ${icon("plus")}
         <span>添加 DNS 记录</span>
       </button>
-      <button class="secondary-button dns-toolbar-button" type="button" disabled>
+      <button class="secondary-button dns-toolbar-button" type="button" id="open-dns-bulk-form" ${state.savingDnsBulk ? "disabled" : ""}>
         ${icon("upload")}
         <span>批量添加 DNS 记录</span>
       </button>
     </div>
 
     ${state.dnsFormOpen ? renderDnsForm() : ""}
+    ${state.dnsBulkFormOpen ? renderDnsBulkForm() : ""}
 
     <section class="panel dns-records-panel">
       <div class="dns-record-title">
         <h2>DNS 记录</h2>
         <div class="selected-counter">
-          <span>已选 0 / ${state.dnsRecords.length}</span>
-          <button class="danger-button" type="button" disabled>批量删除</button>
+          <span>已选 ${selectedCount} / ${state.dnsRecords.length}</span>
+          <button class="danger-button" type="button" id="bulk-delete-dns" ${selectedCount === 0 || state.deletingDnsBulk ? "disabled" : ""}>
+            ${state.deletingDnsBulk ? "删除中" : "批量删除"}
+          </button>
         </div>
       </div>
       ${renderDnsRecords()}

@@ -20,7 +20,7 @@ const securityPresetItems = [
 
 const speedPresetItems = [
   "安全级别：低",
-  "SSL模式：灵活",
+  "SSL模式：严格",
   "缓存级别：积极",
   "浏览器缓存：1年",
   "图片优化：无损",

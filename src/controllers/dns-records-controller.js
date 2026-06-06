@@ -17,6 +17,15 @@ export class DnsRecordsController {
     return { statusCode: 201, body: { record } };
   };
 
+  createBulk = async ({ request, params }) => {
+    const body = await readJsonBody(request);
+    const records = await this.dnsRecordsService.createRecords(
+      params.zoneId,
+      Array.isArray(body) ? body : body.records
+    );
+    return { statusCode: 201, body: { records } };
+  };
+
   update = async ({ request, params }) => {
     if (!params.recordId) {
       throw new HttpError(400, "缺少 DNS 记录 ID");
@@ -38,5 +47,14 @@ export class DnsRecordsController {
 
     const result = await this.dnsRecordsService.deleteRecord(params.zoneId, params.recordId);
     return { statusCode: 200, body: result };
+  };
+
+  deleteBulk = async ({ request, params }) => {
+    const body = await readJsonBody(request);
+    const deleted = await this.dnsRecordsService.deleteRecords(
+      params.zoneId,
+      Array.isArray(body) ? body : body.recordIds
+    );
+    return { statusCode: 200, body: { deleted } };
   };
 }

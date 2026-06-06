@@ -60,6 +60,15 @@
     gap: 14px;
   }
 
+  .topbar-actions {
+    gap: 10px;
+  }
+
+  .account-switcher {
+    min-width: 150px;
+    max-width: 48vw;
+  }
+
   .content {
     width: auto;
     margin: 16px 12px 42px;

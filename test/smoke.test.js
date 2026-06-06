@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import { spawn } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -35,6 +36,22 @@ function startPanel(env) {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
+      AUTH: "",
+      CF_API1: "",
+      CF_API2: "",
+      CF_API3: "",
+      CF_API_KEY: "",
+      CF_EMAIL: "",
+      CF_GLOBAL_API_KEY: "",
+      CF_PANEL_SKIP_DOTENV: "true",
+      CLOUDFLARE_API_KEY: "",
+      CLOUDFLARE_EMAIL: "",
+      CLOUDFLARE_GLOBAL_API_KEY: "",
+      EMAIL1: "",
+      EMAIL2: "",
+      EMAIL3: "",
+      PASSWORD: "",
+      USER: "",
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -52,6 +69,47 @@ function startPanel(env) {
       await once(child, "exit").catch(() => {});
     },
   };
+}
+
+function base32Decode(input) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const bytes = [];
+  let bits = 0;
+  let value = 0;
+
+  for (const char of String(input).toUpperCase().replace(/[\s=-]/g, "")) {
+    const index = alphabet.indexOf(char);
+
+    if (index === -1) {
+      throw new Error("Invalid base32 character");
+    }
+
+    value = (value << 5) | index;
+    bits += 5;
+
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+
+  return Buffer.from(bytes);
+}
+
+function makeTotp(secret, now = Date.now()) {
+  const counter = Math.floor(now / 1000 / 30);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+
+  const hmac = createHmac("sha1", base32Decode(secret)).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+
+  return String(binary % 1_000_000).padStart(6, "0");
 }
 
 function makeZone(overrides = {}) {
@@ -247,12 +305,110 @@ test("returns a clear setup error when credentials are missing", async () => {
   }
 });
 
-test("reports credential status without exposing the Global API Key", async () => {
-  const panelPort = 3215;
+test("creates a Cloudflare zone from the add-domain endpoint", async () => {
+  const requests = [];
+  const accountId = "account_owner_1";
+  const zoneId = "a".repeat(32);
+  const cloudflareMock = createServer(async (request, response) => {
+    const url = new URL(request.url, "http://127.0.0.1");
+    const bodyChunks = [];
+
+    for await (const chunk of request) {
+      bodyChunks.push(chunk);
+    }
+
+    const bodyText = Buffer.concat(bodyChunks).toString("utf8");
+    requests.push({
+      body: bodyText ? JSON.parse(bodyText) : null,
+      method: request.method,
+      path: url.pathname,
+    });
+
+    if (request.method === "GET" && url.pathname === "/accounts") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          success: true,
+          errors: [],
+          messages: [],
+          result: [{ id: accountId, name: "Primary Account" }],
+        })
+      );
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/zones") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          success: true,
+          errors: [],
+          messages: [],
+          result: makeZone({
+            id: zoneId,
+            name: requests.at(-1).body.name,
+            status: "pending",
+          }),
+        })
+      );
+      return;
+    }
+
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ success: false, errors: [{ message: "not found" }] }));
+  });
+
+  const mockUrl = await listen(cloudflareMock);
+  const panelPort = 3220;
   const panel = startPanel({
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "admin@example.com",
     CLOUDFLARE_GLOBAL_API_KEY: "global-key",
+    CLOUDFLARE_API_BASE_URL: mockUrl,
+  });
+
+  try {
+    await waitForHttp(`http://127.0.0.1:${panelPort}/`);
+
+    const createResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Example.COM", jumpStart: false }),
+    });
+    const createPayload = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(createPayload.zone.id, zoneId);
+    assert.equal(createPayload.zone.name, "example.com");
+    assert.equal(createPayload.zone.status, "pending");
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.path, request.body]),
+      [
+        ["GET", "/accounts", null],
+        [
+          "POST",
+          "/zones",
+          {
+            account: { id: accountId },
+            jump_start: false,
+            name: "example.com",
+            type: "full",
+          },
+        ],
+      ]
+    );
+  } finally {
+    await panel.stop();
+    cloudflareMock.close();
+  }
+});
+
+test("reports server account status without exposing the Global API Key", async () => {
+  const panelPort = 3215;
+  const panel = startPanel({
+    PORT: String(panelPort),
+    EMAIL1: "admin@example.com",
+    CF_API1: "global-key",
   });
 
   try {
@@ -264,8 +420,10 @@ test("reports credential status without exposing the Global API Key", async () =
     const statusPayload = await statusResponse.json();
 
     assert.equal(statusResponse.status, 200);
+    assert.equal(statusPayload.authenticated, true);
     assert.equal(statusPayload.hasCredentials, true);
     assert.equal(statusPayload.email, "ad***@example.com");
+    assert.equal(statusPayload.accounts[0].email, "ad***@example.com");
     assert.equal(JSON.stringify(statusPayload).includes("global-key"), false);
 
     const connectResponse = await fetch(
@@ -274,38 +432,35 @@ test("reports credential status without exposing the Global API Key", async () =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: "operator@example.com",
-          globalApiKey: "runtime-key",
+          user: "admin",
+          password: "password",
+          auth: "123456",
         }),
       }
     );
     const connectPayload = await connectResponse.json();
 
-    assert.equal(connectResponse.status, 200);
-    assert.equal(connectPayload.hasCredentials, true);
-    assert.equal(connectPayload.email, "op******@example.com");
-    assert.equal(JSON.stringify(connectPayload).includes("runtime-key"), false);
+    assert.equal(connectResponse.status, 412);
+    assert.match(connectPayload.error, /USER/);
 
     const partialConnectResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/connect`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "only-email@example.com",
-        }),
+        body: JSON.stringify({ user: "admin" }),
       }
     );
     const partialConnectPayload = await partialConnectResponse.json();
 
-    assert.equal(partialConnectResponse.status, 400);
-    assert.match(partialConnectPayload.error, /同时填写/);
+    assert.equal(partialConnectResponse.status, 412);
+    assert.match(partialConnectPayload.error, /USER/);
   } finally {
     await panel.stop();
   }
 });
 
-test("stores browser credential logins in HttpOnly session cookies without exposing keys", async () => {
+test("uses panel login cookies and switches between environment Cloudflare accounts", async () => {
   const requests = [];
   const cloudflareMock = createServer((request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
@@ -316,13 +471,15 @@ test("stores browser credential logins in HttpOnly session cookies without expos
     });
 
     if (request.method === "GET" && url.pathname === "/zones") {
+      const zoneId =
+        request.headers["x-auth-key"] === "second-secret-key" ? "second-zone" : "first-zone";
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
           success: true,
           errors: [],
           messages: [],
-          result: [makeZone({ id: "cookie-zone" })],
+          result: [makeZone({ id: zoneId })],
           result_info: { page: 1, per_page: 50, total_pages: 1, total_count: 1 },
         })
       );
@@ -335,14 +492,18 @@ test("stores browser credential logins in HttpOnly session cookies without expos
 
   const mockUrl = await listen(cloudflareMock);
   const panelPort = 3216;
+  const authSecret = "JBSWY3DPEHPK3PXP";
   const panel = startPanel({
     PORT: String(panelPort),
-    CLOUDFLARE_EMAIL: "",
-    CLOUDFLARE_GLOBAL_API_KEY: "",
-    CF_EMAIL: "",
-    CF_GLOBAL_API_KEY: "",
-    CLOUDFLARE_API_KEY: "",
-    CF_API_KEY: "",
+    USER: "operator",
+    PASSWORD: "strong-password",
+    AUTH: authSecret,
+    EMAIL1: "first@example.com",
+    CF_API1: "first-secret-key",
+    CF_NAME1: "主账号",
+    EMAIL2: "second@example.com",
+    CF_API2: "second-secret-key",
+    CF_NAME2: "备用账号",
     CLOUDFLARE_API_BASE_URL: mockUrl,
     SESSION_TTL_DAYS: "30",
     SECURE_COOKIES: "false",
@@ -358,6 +519,17 @@ test("stores browser credential logins in HttpOnly session cookies without expos
 
     assert.equal(initialStatusResponse.status, 200);
     assert.equal(initialStatusPayload.hasCredentials, false);
+    assert.equal(initialStatusPayload.authenticated, false);
+    assert.equal(initialStatusPayload.loginRequired, true);
+    assert.deepEqual(initialStatusPayload.accounts, []);
+    assert.equal(JSON.stringify(initialStatusPayload).includes("first@example.com"), false);
+    assert.equal(JSON.stringify(initialStatusPayload).includes("first-secret-key"), false);
+
+    const noCookieZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`);
+    const noCookieZonesPayload = await noCookieZonesResponse.json();
+
+    assert.equal(noCookieZonesResponse.status, 401);
+    assert.match(noCookieZonesPayload.error, /请先登录面板/);
 
     const connectResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/connect`,
@@ -365,8 +537,9 @@ test("stores browser credential logins in HttpOnly session cookies without expos
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: "operator@example.com",
-          globalApiKey: "runtime-secret-key",
+          user: "operator",
+          password: "strong-password",
+          auth: makeTotp(authSecret),
         }),
       }
     );
@@ -375,17 +548,23 @@ test("stores browser credential logins in HttpOnly session cookies without expos
     const sessionCookie = setCookie.split(";")[0];
 
     assert.equal(connectResponse.status, 200);
+    assert.equal(connectPayload.authenticated, true);
     assert.equal(connectPayload.hasCredentials, true);
-    assert.equal(connectPayload.email, "op******@example.com");
+    assert.equal(connectPayload.email, "fi***@example.com");
+    assert.equal(connectPayload.activeCloudflareAccount.id, "cf1");
+    assert.equal(connectPayload.accounts.length, 2);
+    assert.equal(connectPayload.accounts[0].email, "fi***@example.com");
+    assert.equal(connectPayload.accounts[1].email, "se****@example.com");
     assert.equal(connectPayload.source, "cookie");
     assert.match(connectPayload.expiresAt, /T/);
     assert.match(setCookie, /cf_panel_session=/);
     assert.match(setCookie, /Max-Age=2592000/);
     assert.match(setCookie, /HttpOnly/);
     assert.match(setCookie, /SameSite=Lax/);
-    assert.equal(setCookie.includes("runtime-secret-key"), false);
-    assert.equal(setCookie.includes("operator@example.com"), false);
-    assert.equal(JSON.stringify(connectPayload).includes("runtime-secret-key"), false);
+    assert.equal(setCookie.includes("first-secret-key"), false);
+    assert.equal(setCookie.includes("first@example.com"), false);
+    assert.equal(JSON.stringify(connectPayload).includes("first-secret-key"), false);
+    assert.equal(JSON.stringify(connectPayload).includes("second-secret-key"), false);
 
     const cookieStatusResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/session/status`,
@@ -396,10 +575,12 @@ test("stores browser credential logins in HttpOnly session cookies without expos
     const cookieStatusPayload = await cookieStatusResponse.json();
 
     assert.equal(cookieStatusResponse.status, 200);
+    assert.equal(cookieStatusPayload.authenticated, true);
     assert.equal(cookieStatusPayload.hasCredentials, true);
-    assert.equal(cookieStatusPayload.email, "op******@example.com");
+    assert.equal(cookieStatusPayload.email, "fi***@example.com");
     assert.equal(cookieStatusPayload.source, "cookie");
-    assert.equal(JSON.stringify(cookieStatusPayload).includes("runtime-secret-key"), false);
+    assert.equal(cookieStatusPayload.activeCloudflareAccount.id, "cf1");
+    assert.equal(JSON.stringify(cookieStatusPayload).includes("first-secret-key"), false);
 
     const zonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
       headers: { Cookie: sessionCookie },
@@ -407,17 +588,47 @@ test("stores browser credential logins in HttpOnly session cookies without expos
     const zonesPayload = await zonesResponse.json();
 
     assert.equal(zonesResponse.status, 200);
-    assert.equal(zonesPayload.zones[0].id, "cookie-zone");
+    assert.equal(zonesPayload.zones[0].id, "first-zone");
+
+    const switchResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts/cf2/select`,
+      {
+        method: "POST",
+        headers: { Cookie: sessionCookie },
+      }
+    );
+    const switchPayload = await switchResponse.json();
+
+    assert.equal(switchResponse.status, 200);
+    assert.equal(switchPayload.activeCloudflareAccount.id, "cf2");
+    assert.equal(switchPayload.email, "se****@example.com");
+    assert.equal(JSON.stringify(switchPayload).includes("second-secret-key"), false);
+
+    const switchedZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const switchedZonesPayload = await switchedZonesResponse.json();
+
+    assert.equal(switchedZonesResponse.status, 200);
+    assert.equal(switchedZonesPayload.zones[0].id, "second-zone");
     assert.deepEqual(
       requests.map((request) => [request.path, request.email, request.key]),
-      [["/zones", "operator@example.com", "runtime-secret-key"]]
+      [
+        ["/zones", "first@example.com", "first-secret-key"],
+        ["/zones", "second@example.com", "second-secret-key"],
+      ]
     );
 
-    const noCookieZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`);
-    const noCookieZonesPayload = await noCookieZonesResponse.json();
+    const historyResponse = await fetch(`http://127.0.0.1:${panelPort}/api/operation-history`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const historyPayload = await historyResponse.json();
+    const serializedHistory = JSON.stringify(historyPayload);
 
-    assert.equal(noCookieZonesResponse.status, 412);
-    assert.match(noCookieZonesPayload.error, /CLOUDFLARE_EMAIL/);
+    assert.equal(historyResponse.status, 200);
+    assert.equal(serializedHistory.includes("first-secret-key"), false);
+    assert.equal(serializedHistory.includes("second-secret-key"), false);
+    assert.equal(serializedHistory.includes("strong-password"), false);
 
     const logoutResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/logout`, {
       method: "POST",
@@ -441,6 +652,7 @@ test("stores browser credential logins in HttpOnly session cookies without expos
 
     assert.equal(revokedStatusResponse.status, 200);
     assert.equal(revokedStatusPayload.hasCredentials, false);
+    assert.equal(revokedStatusPayload.authenticated, false);
   } finally {
     await panel.stop();
     cloudflareMock.close();
@@ -450,6 +662,8 @@ test("stores browser credential logins in HttpOnly session cookies without expos
 test("manages DNS records through Cloudflare DNS records API", async () => {
   const zoneId = "a".repeat(32);
   const recordId = "b".repeat(32);
+  const firstBulkRecordId = "d".repeat(32);
+  const secondBulkRecordId = "e".repeat(32);
   const requests = [];
   const cloudflareMock = createServer(async (request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
@@ -523,17 +737,18 @@ test("manages DNS records through Cloudflare DNS records API", async () => {
       return;
     }
 
-    if (
-      request.method === "DELETE" &&
-      url.pathname === `/zones/${zoneId}/dns_records/${recordId}`
-    ) {
+    const deleteRecordMatch = url.pathname.match(
+      new RegExp(`^/zones/${zoneId}/dns_records/(?<recordId>[a-z0-9]{32})$`, "i")
+    );
+
+    if (request.method === "DELETE" && deleteRecordMatch) {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
           success: true,
           errors: [],
           messages: [],
-          result: { id: recordId },
+          result: { id: deleteRecordMatch.groups.recordId },
         })
       );
       return;
@@ -580,6 +795,37 @@ test("manages DNS records through Cloudflare DNS records API", async () => {
     assert.equal(createResponse.status, 201);
     assert.equal(createPayload.record.name, "api.alpha.example");
 
+    const bulkCreateResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/zones/${zoneId}/dns-records/bulk`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [
+            {
+              type: "A",
+              name: "bulk-one.alpha.example",
+              content: "192.0.2.40",
+              ttl: 1,
+              proxied: true,
+            },
+            {
+              type: "MX",
+              name: "alpha.example",
+              content: "mail.alpha.example",
+              ttl: 300,
+              priority: 20,
+            },
+          ],
+        }),
+      }
+    );
+    const bulkCreatePayload = await bulkCreateResponse.json();
+    assert.equal(bulkCreateResponse.status, 201);
+    assert.equal(bulkCreatePayload.records.length, 2);
+    assert.equal(bulkCreatePayload.records[0].name, "bulk-one.alpha.example");
+    assert.equal(bulkCreatePayload.records[1].priority, 20);
+
     const updateResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/zones/${zoneId}/dns-records/${recordId}`,
       {
@@ -607,6 +853,23 @@ test("manages DNS records through Cloudflare DNS records API", async () => {
     assert.equal(deleteResponse.status, 200);
     assert.equal(deletePayload.id, recordId);
 
+    const bulkDeleteResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/zones/${zoneId}/dns-records/bulk-delete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordIds: [firstBulkRecordId, secondBulkRecordId, firstBulkRecordId],
+        }),
+      }
+    );
+    const bulkDeletePayload = await bulkDeleteResponse.json();
+    assert.equal(bulkDeleteResponse.status, 200);
+    assert.deepEqual(
+      bulkDeletePayload.deleted.map((item) => item.id),
+      [firstBulkRecordId, secondBulkRecordId]
+    );
+
     assert.deepEqual(
       requests
         .filter((request) => request.path.includes("/dns_records"))
@@ -614,8 +877,12 @@ test("manages DNS records through Cloudflare DNS records API", async () => {
       [
         ["GET", `/zones/${zoneId}/dns_records`],
         ["POST", `/zones/${zoneId}/dns_records`],
+        ["POST", `/zones/${zoneId}/dns_records`],
+        ["POST", `/zones/${zoneId}/dns_records`],
         ["PATCH", `/zones/${zoneId}/dns_records/${recordId}`],
         ["DELETE", `/zones/${zoneId}/dns_records/${recordId}`],
+        ["DELETE", `/zones/${zoneId}/dns_records/${firstBulkRecordId}`],
+        ["DELETE", `/zones/${zoneId}/dns_records/${secondBulkRecordId}`],
       ]
     );
   } finally {

@@ -1,24 +1,39 @@
 import {
   ApiUnavailableError,
-  connectCloudflareAccount,
   fetchSessionStatus,
+  loginPanel,
   logoutCloudflareAccount,
+  switchCloudflareAccount,
 } from "../api.js";
-import { resetSessionState, state } from "../state.js";
+import { resetCloudflareAccountData, resetSessionState, state } from "../state.js";
 
 function readConnectForm() {
   const form = document.querySelector("#cloudflare-connect-form");
 
   if (!form) {
-    return { email: "", globalApiKey: "" };
+    return { auth: "", password: "", user: "" };
   }
 
   const formData = new FormData(form);
 
   return {
-    email: String(formData.get("email") || "").trim(),
-    globalApiKey: String(formData.get("globalApiKey") || "").trim(),
+    auth: String(formData.get("auth") || "").trim(),
+    cloudflareAccountId: String(formData.get("cloudflareAccountId") || "").trim(),
+    password: String(formData.get("password") || "").trim(),
+    user: String(formData.get("user") || "").trim(),
   };
+}
+
+function applySession(session) {
+  state.sessionAuthenticated = Boolean(session.authenticated);
+  state.sessionHasServerCredentials = Boolean(session.hasCredentials);
+  state.loginRequired = Boolean(session.loginRequired);
+  state.cloudflareAccounts = Array.isArray(session.accounts) ? session.accounts : [];
+  state.activeCloudflareAccount = session.activeCloudflareAccount || null;
+  state.activeCloudflareAccountId = session.activeCloudflareAccount?.id || "";
+  state.sessionEmail = session.email || session.activeCloudflareAccount?.email || "";
+  state.sessionExpiresAt = session.expiresAt || "";
+  state.sessionSource = session.source || "";
 }
 
 export function createSessionActions({ loadZones, renderApp }) {
@@ -29,12 +44,9 @@ export function createSessionActions({ loadZones, renderApp }) {
 
     try {
       const session = await fetchSessionStatus();
-      state.sessionHasServerCredentials = Boolean(session.hasCredentials);
-      state.sessionEmail = session.email || "";
-      state.sessionExpiresAt = session.expiresAt || "";
-      state.sessionSource = session.source || "";
+      applySession(session);
 
-      if (session.source === "cookie") {
+      if (session.authenticated || (session.hasCredentials && !session.loginRequired)) {
         state.connected = true;
         await loadZones({ throwOnError: false });
       }
@@ -52,13 +64,9 @@ export function createSessionActions({ loadZones, renderApp }) {
     event?.preventDefault();
 
     const credentials = readConnectForm();
-    const hasSuppliedCredentials = Boolean(credentials.email && credentials.globalApiKey);
 
-    if (
-      !state.sessionHasServerCredentials &&
-      (!credentials.email || !credentials.globalApiKey)
-    ) {
-      state.sessionError = "请输入 Cloudflare 账号邮箱和 Global API Key。";
+    if (!credentials.user || !credentials.password || !credentials.auth) {
+      state.sessionError = "请输入用户名、密码和 2FA 验证码。";
       renderApp();
       return;
     }
@@ -68,35 +76,48 @@ export function createSessionActions({ loadZones, renderApp }) {
     renderApp();
 
     try {
-      let session = await connectCloudflareAccount(credentials);
+      await loginPanel(credentials);
+      const session = await fetchSessionStatus();
 
-      if (hasSuppliedCredentials) {
-        const verifiedSession = await fetchSessionStatus();
-
-        if (verifiedSession.source !== "cookie") {
-          throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新登录。");
-        }
-
-        session = verifiedSession;
+      if (!session.authenticated) {
+        throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新登录。");
       }
 
       state.connected = true;
-      state.sessionHasServerCredentials = Boolean(session.hasCredentials);
-      state.sessionEmail = session.email || credentials.email;
-      state.sessionExpiresAt = session.expiresAt || "";
-      state.sessionSource = session.source || "";
+      applySession(session);
       state.mainSection = "domain";
       await loadZones({ throwOnError: true });
     } catch (error) {
-      if (hasSuppliedCredentials) {
-        await logoutCloudflareAccount().catch(() => {});
-      }
-
       state.connected = false;
       state.zoneError = "";
       state.sessionError = error.message;
     } finally {
       state.connectingSession = false;
+      renderApp();
+    }
+  }
+
+  async function changeCloudflareAccount(event) {
+    const accountId = String(event?.target?.value || "").trim();
+
+    if (!accountId || accountId === state.activeCloudflareAccountId) {
+      return;
+    }
+
+    state.selectingCloudflareAccount = true;
+    state.sessionError = "";
+    renderApp();
+
+    try {
+      const session = await switchCloudflareAccount(accountId);
+      applySession(session);
+      resetCloudflareAccountData();
+      state.connected = true;
+      await loadZones({ throwOnError: true });
+    } catch (error) {
+      state.sessionError = error.message;
+    } finally {
+      state.selectingCloudflareAccount = false;
       renderApp();
     }
   }
@@ -114,6 +135,7 @@ export function createSessionActions({ loadZones, renderApp }) {
   }
 
   return {
+    changeCloudflareAccount,
     checkSession,
     connectSession,
     logoutSession,

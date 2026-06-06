@@ -2,6 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { HttpError } from "../../lib/http-error.js";
 
+const missingCredentialMessage =
+  "缺少 Cloudflare 凭据。请配置 EMAIL1 和 CF_API1，或继续使用旧变量 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。";
+
 export class CloudflareClient {
   constructor({ apiBaseUrl, email, globalApiKey, requestTimeoutMs, fetchImpl = fetch }) {
     this.apiBaseUrl = apiBaseUrl.replace(/\/+$/, "");
@@ -79,10 +82,7 @@ export class CloudflareClient {
 
   async deleteAny(path) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const response = await this.request(this.makeUrl(path), {
@@ -114,10 +114,7 @@ export class CloudflareClient {
 
   async getText(path, searchParams = {}) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const url = this.makeUrl(path, searchParams);
@@ -139,10 +136,7 @@ export class CloudflareClient {
 
   async putMultipart(path, formData) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const response = await this.request(this.makeUrl(path), {
@@ -179,10 +173,7 @@ export class CloudflareClient {
 
   async sendRaw(method, path, { searchParams = {}, body, headers = {} } = {}) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const response = await this.request(this.makeUrl(path, searchParams), {
@@ -204,10 +195,7 @@ export class CloudflareClient {
 
   async graphql(query, variables = {}) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const url = new URL("graphql", `${this.apiBaseUrl}/`);
@@ -232,10 +220,7 @@ export class CloudflareClient {
 
   async send(method, path, { searchParams = {}, body } = {}) {
     if (!this.hasCredentials()) {
-      throw new HttpError(
-        412,
-        "缺少 Cloudflare 凭据。请设置 CLOUDFLARE_EMAIL 和 CLOUDFLARE_GLOBAL_API_KEY。"
-      );
+      throw new HttpError(412, missingCredentialMessage);
     }
 
     const url = this.makeUrl(path, searchParams);

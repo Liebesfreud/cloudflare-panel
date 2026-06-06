@@ -37,19 +37,43 @@ export async function fetchZones() {
   return payload.zones;
 }
 
+export async function createZone(request) {
+  const response = await fetch("/api/zones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const payload = await readJson(response, "添加域名失败");
+
+  return payload.zone;
+}
+
 export async function fetchSessionStatus() {
   const response = await fetch("/api/session/status");
   return readJson(response, "读取连接状态失败");
 }
 
-export async function connectCloudflareAccount(credentials) {
+export async function loginPanel(credentials) {
   const response = await fetch("/api/session/connect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
   });
 
-  return readJson(response, "验证 Cloudflare 凭据失败");
+  return readJson(response, "面板登录失败");
+}
+
+export const connectCloudflareAccount = loginPanel;
+
+export async function switchCloudflareAccount(accountId) {
+  const response = await fetch(
+    `/api/session/cloudflare-accounts/${encodeURIComponent(accountId)}/select`,
+    {
+      method: "POST",
+    }
+  );
+
+  return readJson(response, "切换 Cloudflare 账号失败");
 }
 
 export async function logoutCloudflareAccount() {
@@ -95,6 +119,27 @@ export async function removeDnsRecord(zoneId, recordId) {
   });
 
   return readJson(response, "删除 DNS 记录失败");
+}
+
+export async function createDnsRecordsBulk(zoneId, records) {
+  const response = await fetch(`/api/zones/${zoneId}/dns-records/bulk`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ records }),
+  });
+  const payload = await readJson(response, "批量添加 DNS 记录失败");
+
+  return payload.records;
+}
+
+export async function removeDnsRecordsBulk(zoneId, recordIds) {
+  const response = await fetch(`/api/zones/${zoneId}/dns-records/bulk-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recordIds }),
+  });
+
+  return readJson(response, "批量删除 DNS 记录失败");
 }
 
 export async function fetchCacheSettings(zoneId) {

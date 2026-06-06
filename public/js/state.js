@@ -8,12 +8,18 @@ import {
 export const state = {
   checkingSession: true,
   connectingSession: false,
+  selectingCloudflareAccount: false,
   connected: false,
+  sessionAuthenticated: false,
   sessionEmail: "",
   sessionHasServerCredentials: false,
   sessionExpiresAt: "",
   sessionSource: "",
   sessionError: "",
+  loginRequired: false,
+  cloudflareAccounts: [],
+  activeCloudflareAccount: null,
+  activeCloudflareAccountId: "",
   mainSection: "domain",
   view: "domains",
   zoneSection: "dns",
@@ -45,6 +51,8 @@ export const state = {
   loadingDns: false,
   loadingCacheSettings: false,
   loadingFirewallRules: false,
+  addingDomain: false,
+  domainDraft: "",
   zoneError: "",
   analyticsError: "",
   pageRulesError: "",
@@ -55,7 +63,12 @@ export const state = {
   firewallError: "",
   notice: "",
   dnsFormOpen: false,
+  dnsBulkFormOpen: false,
+  dnsBulkText: "",
+  selectedDnsRecordIds: [],
   savingDns: false,
+  savingDnsBulk: false,
+  deletingDnsBulk: false,
   savingCacheSettings: false,
   savingSslSettings: false,
   savingCertificate: false,
@@ -155,9 +168,21 @@ export const state = {
 
 export function resetSessionState() {
   state.connected = false;
+  state.sessionAuthenticated = false;
   state.sessionError = "";
   state.sessionExpiresAt = "";
   state.sessionSource = "";
+  state.sessionEmail = "";
+  state.sessionHasServerCredentials = false;
+  state.loginRequired = false;
+  state.cloudflareAccounts = [];
+  state.activeCloudflareAccount = null;
+  state.activeCloudflareAccountId = "";
+  state.selectingCloudflareAccount = false;
+  resetCloudflareAccountData();
+}
+
+export function resetCloudflareAccountData() {
   state.mainSection = "domain";
   state.view = "domains";
   state.zoneSection = "dns";
@@ -181,6 +206,44 @@ export function resetSessionState() {
   state.firewallRules = [];
   state.firewallRulesets = null;
   state.firewallWarnings = [];
+  state.loadingZones = true;
+  state.loadingAnalytics = false;
+  state.loadingPageRules = false;
+  state.loadingSslSettings = false;
+  state.loadingCertificates = false;
+  state.loadingDns = false;
+  state.loadingCacheSettings = false;
+  state.loadingFirewallRules = false;
+  state.addingDomain = false;
+  state.domainDraft = "";
+  state.zoneError = "";
+  state.analyticsError = "";
+  state.pageRulesError = "";
+  state.sslError = "";
+  state.certificateError = "";
+  state.dnsError = "";
+  state.cacheError = "";
+  state.firewallError = "";
+  state.notice = "";
+  state.dnsFormOpen = false;
+  state.dnsBulkFormOpen = false;
+  state.dnsBulkText = "";
+  state.selectedDnsRecordIds = [];
+  state.savingDns = false;
+  state.savingDnsBulk = false;
+  state.deletingDnsBulk = false;
+  state.savingCacheSettings = false;
+  state.savingSslSettings = false;
+  state.savingCertificate = false;
+  state.purgingCache = false;
+  state.savingFirewallRule = false;
+  state.savingRulesetRule = false;
+  state.savingPageRule = false;
+  state.deletingFirewallRuleId = "";
+  state.deletingPageRuleId = "";
+  state.deletingCertificateId = "";
+  state.updatingFirewallRuleId = "";
+  state.updatingPageRuleId = "";
   resetDnsForm();
   resetFirewallForm();
   resetPageRuleForm();
@@ -194,6 +257,11 @@ export function resetSessionState() {
 export function resetDnsForm() {
   state.dnsForm = { ...defaultDnsForm };
   state.dnsFormOpen = false;
+}
+
+export function resetDnsBulkForm() {
+  state.dnsBulkFormOpen = false;
+  state.dnsBulkText = "";
 }
 
 export function resetFirewallForm() {

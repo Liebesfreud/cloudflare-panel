@@ -6,7 +6,7 @@ const settingDefinitions = [
     id: "ssl",
     key: "ssl",
     label: "SSL 加密模式",
-    fallback: "flexible",
+    fallback: "strict",
     values: new Set(["off", "flexible", "full", "strict", "origin_pull"]),
   },
   {

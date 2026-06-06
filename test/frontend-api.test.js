@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { parseDnsBulkText } from "../public/js/actions/dns-actions.js";
 import { createSessionActions } from "../public/js/actions/session-actions.js";
 import {
   ApiUnavailableError,
@@ -38,6 +39,48 @@ test("front-end API reports non-JSON static Pages responses as backend unavailab
   }
 });
 
+test("DNS bulk text parser supports quoted TXT content and MX shorthand", () => {
+  const records = parseDnsBulkText(`
+    # comments are ignored
+    A @ 192.0.2.10 1 true
+    TXT @ "v=spf1 include:_spf.example.com ~all" 1
+    MX @ mail.example.com 300 10
+  `);
+
+  assert.deepEqual(records, [
+    {
+      content: "192.0.2.10",
+      name: "@",
+      proxied: true,
+      ttl: 1,
+      type: "A",
+    },
+    {
+      content: "v=spf1 include:_spf.example.com ~all",
+      name: "@",
+      ttl: 1,
+      type: "TXT",
+    },
+    {
+      content: "mail.example.com",
+      name: "@",
+      priority: "10",
+      ttl: 300,
+      type: "MX",
+    },
+  ]);
+
+  assert.throws(
+    () => parseDnsBulkText("TXT @ v=spf1 include:_spf.example.com ~all 1"),
+    /TTL 必须/
+  );
+
+  assert.throws(
+    () => parseDnsBulkText("TXT @ v=spf1 include:_spf.example.com ~all 1 extra"),
+    /字段过多/
+  );
+});
+
 test("session startup keeps the GitHub Pages login screen clean when API is static HTML", async () => {
   const previousFetch = global.fetch;
   let loadZonesCalled = false;
@@ -47,6 +90,7 @@ test("session startup keeps the GitHub Pages login screen clean when API is stat
   state.connected = false;
   state.checkingSession = false;
   state.sessionError = "stale error";
+  state.sessionAuthenticated = false;
   state.sessionHasServerCredentials = false;
   state.sessionEmail = "";
   state.sessionExpiresAt = "";
@@ -94,8 +138,9 @@ test("manual login still tells static Pages users that the Node backend is missi
       assert.equal(selector, "#cloudflare-connect-form");
       return {
         values: {
-          email: "operator@example.com",
-          globalApiKey: "runtime-key",
+          auth: "123456",
+          password: "panel-password",
+          user: "operator",
         },
       };
     },
@@ -114,6 +159,7 @@ test("manual login still tells static Pages users that the Node backend is missi
     state.connected = false;
     state.connectingSession = false;
     state.sessionError = "";
+    state.sessionAuthenticated = false;
     state.sessionHasServerCredentials = false;
     state.sessionEmail = "";
     state.sessionExpiresAt = "";
@@ -128,5 +174,85 @@ test("manual login still tells static Pages users that the Node backend is missi
     global.document = previousDocument;
     global.fetch = previousFetch;
     global.FormData = previousFormData;
+  }
+});
+
+test("switching Cloudflare accounts resets account-scoped front-end data and reloads zones", async () => {
+  const previousFetch = global.fetch;
+  const previousHistory = global.history;
+  const requested = [];
+  let loadZonesCalled = 0;
+  let renderCount = 0;
+
+  global.fetch = async (url, options = {}) => {
+    requested.push([String(url), options.method || "GET"]);
+
+    return new Response(
+      JSON.stringify({
+        accounts: [
+          { active: false, email: "fi***@example.com", id: "cf1", name: "主账号" },
+          { active: true, email: "se****@example.com", id: "cf2", name: "备用账号" },
+        ],
+        activeCloudflareAccount: {
+          email: "se****@example.com",
+          id: "cf2",
+          name: "备用账号",
+        },
+        authenticated: true,
+        email: "se****@example.com",
+        expiresAt: "2026-06-06T00:00:00.000Z",
+        hasCredentials: true,
+        loginRequired: true,
+        source: "cookie",
+      }),
+      {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        status: 200,
+      }
+    );
+  };
+  global.history = {
+    replaceState() {},
+  };
+
+  state.connected = true;
+  state.activeCloudflareAccountId = "cf1";
+  state.cloudflareAccounts = [
+    { active: true, email: "fi***@example.com", id: "cf1", name: "主账号" },
+    { active: false, email: "se****@example.com", id: "cf2", name: "备用账号" },
+  ];
+  state.zones = [{ id: "old-zone" }];
+  state.dnsRecords = [{ id: "old-record" }];
+  state.workersList = [{ name: "old-worker" }];
+  state.operationHistory = [{ id: "old-history" }];
+  state.mainSection = "workers";
+
+  const actions = createSessionActions({
+    async loadZones() {
+      loadZonesCalled += 1;
+      state.zones = [{ id: "new-zone" }];
+    },
+    renderApp() {
+      renderCount += 1;
+    },
+  });
+
+  try {
+    await actions.changeCloudflareAccount({ target: { value: "cf2" } });
+
+    assert.deepEqual(requested, [["/api/session/cloudflare-accounts/cf2/select", "POST"]]);
+    assert.equal(loadZonesCalled, 1);
+    assert.equal(state.activeCloudflareAccountId, "cf2");
+    assert.equal(state.sessionEmail, "se****@example.com");
+    assert.deepEqual(state.zones, [{ id: "new-zone" }]);
+    assert.deepEqual(state.dnsRecords, []);
+    assert.deepEqual(state.workersList, []);
+    assert.deepEqual(state.operationHistory, []);
+    assert.equal(state.mainSection, "domain");
+    assert.equal(state.selectingCloudflareAccount, false);
+    assert.equal(renderCount >= 2, true);
+  } finally {
+    global.fetch = previousFetch;
+    global.history = previousHistory;
   }
 });

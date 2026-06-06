@@ -2832,3 +2832,180 @@ node scripts/build-pages.js _site local-check
 - Pages 构建版本化测试 2 项通过。
 - JS 语法检查通过。
 - 本地 `_site` 产物会把 `./app.js`、`./styles.css`、模块 import、CSS `@import` 等资源追加统一版本号。
+
+## 2026-06-06 多账户管理、面板登录与环境变量部署模式
+
+用户要求增加多账户管理，同时支持 serverless 和本地部署，并明确 Cloudflare API 调用也追加到环境变量：`EMAIL1/CF_API1`、`EMAIL2/CF_API2`。本次把浏览器输入 Cloudflare Global API Key 的旧登录方式改为面板账号登录，Cloudflare 账号统一由服务端环境变量提供。
+
+核心设计：
+
+- 面板登录环境变量：
+  - `USER`：面板用户名。
+  - `PASSWORD`：面板密码。
+  - `AUTH`：TOTP Base32 密钥，不是一次性 6 位验证码。
+- Cloudflare 多账号环境变量：
+  - `EMAIL1` + `CF_API1`：第一组 Cloudflare 账号。
+  - `EMAIL2` + `CF_API2`：第二组 Cloudflare 账号。
+  - 可继续增加 `EMAIL3/CF_API3`。
+  - `CF_NAME1`、`CF_NAME2` 可选，仅用于顶部账号选择器展示。
+- 兼容旧变量：没有 `EMAIL1/CF_API1` 时，仍兼容 `CLOUDFLARE_EMAIL`、`CLOUDFLARE_GLOBAL_API_KEY`、`CF_EMAIL`、`CF_GLOBAL_API_KEY`、`CLOUDFLARE_API_KEY`、`CF_API_KEY` 作为第一组账号。
+
+后端变更：
+
+- 新增 `src/services/cloudflare-account-service.js`。
+  - 负责保存多组 Cloudflare 凭据。
+  - 对前端只返回账号 ID、名称和脱敏邮箱。
+  - 提供严格账号存在判断，切换账号时不会把无效 ID 回退到默认账号。
+- 新增 `src/services/panel-auth-service.js`。
+  - 无第三方依赖实现 Base32、HOTP、TOTP 验证。
+  - `AUTH` 用作 TOTP secret。
+- 更新 `src/config/env.js`。
+  - 收集 `EMAILn/CF_APIn`。
+  - 支持 `.env` 本地部署。
+  - 避免把系统环境自带 `USER` 误当作面板用户名。
+  - 测试可用 `CF_PANEL_SKIP_DOTENV=true` 跳过真实 `.env`。
+- 更新 `src/controllers/credentials-controller.js`。
+  - `POST /api/session/connect` 改为面板登录，不再接收 Cloudflare Global API Key。
+  - `GET /api/session/status` 未认证时不返回 Cloudflare 账号列表。
+  - 新增 `POST /api/session/cloudflare-accounts/:accountId/select` 切换当前 Cloudflare 账号。
+- 更新 `src/routes/api-routes.js`。
+  - 开启 `USER/PASSWORD/AUTH` 后，所有非 `/api/session/*` API 均要求已登录面板。
+  - 每次 Cloudflare API 调用根据当前 session 的 active account 选择对应 `EMAILn/CF_APIn`。
+- 更新 `src/services/cloudflare/cloudflare-client.js`。
+  - 缺凭据提示改为优先提示 `EMAIL1/CF_API1`。
+- 新增 `api/index.js` 和 `vercel.json`。
+  - 提供 Vercel/Node serverless 入口。
+  - GitHub Pages 仍只适合作为静态前端，真实 API 需 Node/serverless 后端。
+
+前端变更：
+
+- 登录页改为输入：用户名、密码、2FA 验证码。
+- Cloudflare API Key 不再出现在浏览器表单中。
+- 顶部栏新增 Cloudflare 账号选择器。
+- 切换账号后会清空域名、DNS、SSL、缓存、防火墙、Workers、开发资源、操作历史等账号作用域状态，并重新加载 Zone。
+- 账号列表只展示名称和脱敏邮箱，不包含 Global API Key。
+
+文档变更：
+
+- `.env.example` 改为 `USER/PASSWORD/AUTH` + `EMAIL1/CF_API1` + `EMAIL2/CF_API2`。
+- `README.md` 更新本地运行、多账号和安全说明。
+- `DEPLOYMENT.md` 更新本地部署、Vercel serverless、GitHub Pages 静态边界、Cloudflare Workers 适配边界、健康检查和安全说明。
+
+验证情况：
+
+```bash
+node --test test/env-auth.test.js test/frontend-api.test.js
+node --test test/smoke.test.js
+```
+
+结果：新增 env/auth、前端 API 和 smoke 测试均通过。
+
+安全边界：
+
+- 前端响应、Cookie、localStorage、sessionStorage、操作历史不保存 Cloudflare Global API Key。
+- 未登录时 `/api/session/status` 不返回账号列表。
+- 操作历史只记录方法、路径、参数和状态，不记录请求体，避免证书私钥、Worker Secret、面板密码、TOTP、Global API Key 进入历史。
+- `.env` 和真实凭据仍禁止提交。
+
+## 2026-06-06 添加域名与 DNS 批量操作真实接入
+
+用户要求修复两项 P2：`添加新域名` 不能只是提示待接入，DNS 批量添加/批量删除不能只是禁用按钮。本次把这两处改为真实调用 Cloudflare API。
+
+后端变更：
+
+- `POST /api/zones` 已接入 Cloudflare Zone 创建。
+  - 请求体支持 `name` 或 `domain`。
+  - 默认 `type=full`、`jump_start=false`。
+  - 未显式传 `accountId` 时，会先调用 Cloudflare `/accounts` 获取当前凭据下第一个 Account ID，再调用 `/zones` 创建 Zone。
+  - Zone 名称会规范为小写并去掉协议、路径和末尾点。
+- 新增 DNS 批量接口：
+  - `POST /api/zones/:zoneId/dns-records/bulk`，请求体 `{ records: [...] }`，逐条调用 Cloudflare `POST /dns_records`。
+  - `POST /api/zones/:zoneId/dns-records/bulk-delete`，请求体 `{ recordIds: [...] }`，去重后逐条调用 Cloudflare `DELETE /dns_records/:id`。
+  - 批量添加/删除单次上限 100 条。
+- 操作历史会记录这三个新 mutating endpoint，但仍不记录请求体。
+
+前端变更：
+
+- 域名列表页的 `添加新域名` 表单现在真实提交 `POST /api/zones`。
+- DNS 页面新增可用的 `批量添加 DNS 记录` 面板。
+  - 格式：`类型 名称 内容 TTL 是否代理 优先级`。
+  - 空行和 `#` 注释会被忽略。
+  - TXT 内容包含空格时需要英文引号，例如 `"v=spf1 include:_spf.example.com ~all"`。
+  - MX 支持简写：`MX @ mail.example.com 300 10`。
+- DNS 记录表格新增行选择、全选、已选计数和真实批量删除。
+
+验证覆盖：
+
+- `test/smoke.test.js` 增加 Zone 创建测试，验证 `/accounts` + `/zones` 的真实 Cloudflare 调用链。
+- DNS smoke 测试覆盖单条增删改、批量创建和批量删除。
+- `test/frontend-api.test.js` 增加批量文本解析测试，覆盖 TXT 引号、MX 简写和非法多字段提示。
+
+边界说明：
+
+- DNS 批量操作当前是顺序执行，没有事务回滚；如果 Cloudflare 在中间某条失败，失败前的记录可能已被创建或删除。
+- 前端批量文本只负责解析；最终合法性仍由后端 DNS service 校验。
+
+## 2026-06-06 SSL 默认与一键加速改为完全（严格）
+
+用户要求 SSL 不再使用灵活模式，改为 Cloudflare 的 `完全（严格）`。Cloudflare API 对应值是 `strict`。
+
+本次变更：
+
+- 一键加速流程不再调用 `setFlexibleSsl`，改为 `setStrictSsl`。
+  - `PATCH /zones/:zoneId/settings/ssl` 请求体从 `{ value: "flexible" }` 改为 `{ value: "strict" }`。
+  - 部署结果 `sslSetting.value` 默认回落值也改为 `strict`。
+- SSL/TLS 设置读取失败时的本地 fallback 从 `flexible` 改为 `strict`。
+- 自动优化里的 SSL 默认值从 `flexible` 改为 `strict`。
+- 自动优化“速度”预设也改为写入 `ssl: "strict"`，前端预设说明从 `SSL模式：灵活` 改为 `SSL模式：严格`。
+- 旧静态 SSL 壳子的默认选中项从 `完全` 改为 `完全（严格）`。
+
+保留项：
+
+- 手动 SSL/TLS 页面和页面规则里仍保留 `灵活/flexible` 作为 Cloudflare 可识别模式，用于展示已有历史配置或用户显式手动选择；自动化和一键加速不再使用它。
+
+## 2026-06-06 Docker 镜像构建、Docker Hub 推送与部署文档
+
+用户要求推送远程仓库前新增 workflow：每次推送自动构建 Docker 镜像并上传 Docker Hub，同时追加 Docker 部署教程。
+
+新增文件：
+
+- `Dockerfile`
+  - 基于 `node:24-alpine`。
+  - 只复制 `package.json`、`src/`、`public/`。
+  - 默认 `NODE_ENV=production`、`PORT=3000`。
+  - 使用非 root `node` 用户运行。
+  - 内置 healthcheck：请求 `/api/session/status`。
+- `.dockerignore`
+  - 排除 `.env`、`.git`、`.github`、`node_modules`、`_site`、日志和本地图片截图。
+- `.github/workflows/docker-image.yml`
+  - push `main`、push `v*` tag、手动 dispatch 时触发。
+  - 先执行 JS 语法检查和 `node --test test/**/*.test.js`。
+  - 使用 Docker Buildx 构建 `linux/amd64` 和 `linux/arm64`。
+  - 登录 Docker Hub 后推送：
+    - `latest`：main 分支。
+    - `sha-<commit>`：每次提交。
+    - `v*`：版本 tag。
+
+需要在 GitHub Actions secrets 配置：
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+- 可选 `DOCKERHUB_REPOSITORY`，例如 `baize233/network`。不配置时默认 `${DOCKERHUB_USERNAME}/${github.event.repository.name}`。
+
+文档变更：
+
+- `README.md` 新增 Docker 快速运行入口。
+- `DEPLOYMENT.md` 新增 Docker 部署章节，包含：
+  - GitHub Actions secrets。
+  - 本地 `docker build`。
+  - `docker run`。
+  - `docker compose`。
+  - Docker 升级。
+  - Docker healthcheck。
+  - `NODE_ENV=production` 下 Cookie 带 `Secure`，本机 HTTP 调试需覆盖 `NODE_ENV=development` 或 `SECURE_COOKIES=false`。
+
+安全边界：
+
+- Docker 镜像不包含 `.env`。
+- GitHub workflow 不写 Docker Hub 密码到仓库，只读取 GitHub Actions secrets。
+- 镜像运行所需 `USER/PASSWORD/AUTH/EMAILn/CF_APIn` 仍通过环境变量或 `--env-file` 注入。

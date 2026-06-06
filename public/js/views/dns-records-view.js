@@ -34,7 +34,14 @@ export function renderDnsRecords() {
   return `
     <div class="dns-table">
       <div class="dns-header">
-        <span></span>
+        <span>
+          <input
+            id="dns-select-all"
+            type="checkbox"
+            aria-label="选择全部 DNS 记录"
+            ${state.dnsRecords.length > 0 && state.selectedDnsRecordIds.length === state.dnsRecords.length ? "checked" : ""}
+          />
+        </span>
         <span>类型</span>
         <span>名称</span>
         <span>内容</span>
@@ -45,7 +52,13 @@ export function renderDnsRecords() {
         .map(
           (record) => `
             <div class="dns-row">
-              <input type="checkbox" aria-label="选择 DNS 记录" />
+              <input
+                class="dns-select-record"
+                type="checkbox"
+                aria-label="选择 DNS 记录"
+                data-record-id="${escapeHtml(record.id)}"
+                ${state.selectedDnsRecordIds.includes(record.id) ? "checked" : ""}
+              />
               <span><span class="type-pill">${escapeHtml(record.type)}</span></span>
               <span class="dns-name" title="${escapeHtml(record.name)}">${escapeHtml(record.name)}</span>
               <span class="dns-content" title="${escapeHtml(record.content)}">

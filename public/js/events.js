@@ -2,17 +2,33 @@ export function bindEvents(actions) {
   document
     .querySelector("#cloudflare-connect-form")
     ?.addEventListener("submit", actions.connectSession);
-  document.querySelector("#connect-with-server-credentials")?.addEventListener("click", () => {
-    actions.connectSession();
-  });
+  document
+    .querySelector("#cloudflare-account-switch")
+    ?.addEventListener("change", actions.changeCloudflareAccount);
   document.querySelector("#logout-session")?.addEventListener("click", actions.logoutSession);
   document.querySelector("#add-domain-form")?.addEventListener("submit", actions.addDomain);
   document.querySelector("#back-to-domains")?.addEventListener("click", actions.backToDomains);
   document.querySelector("#refresh-zone-settings")?.addEventListener("click", actions.refreshZoneSettings);
   document.querySelector("#open-dns-form")?.addEventListener("click", actions.openCreateDnsForm);
+  document.querySelector("#open-dns-bulk-form")?.addEventListener("click", actions.openDnsBulkForm);
   document.querySelector("#dns-record-form")?.addEventListener("submit", actions.saveDnsRecord);
+  document.querySelector("#dns-bulk-form")?.addEventListener("submit", actions.submitDnsBulk);
   document.querySelector("#cancel-dns-edit")?.addEventListener("click", actions.resetDnsForm);
   document.querySelector("#reset-dns-form")?.addEventListener("click", actions.resetDnsForm);
+  document
+    .querySelectorAll(".dns-bulk-close")
+    .forEach((button) => button.addEventListener("click", actions.closeDnsBulkForm));
+  document
+    .querySelector("#bulk-delete-dns")
+    ?.addEventListener("click", actions.deleteSelectedDnsRecords);
+  document
+    .querySelector("#dns-select-all")
+    ?.addEventListener("change", actions.toggleAllDnsRecords);
+  document.querySelectorAll(".dns-select-record").forEach((input) => {
+    input.addEventListener("change", () =>
+      actions.toggleDnsRecordSelection(input.dataset.recordId, input.checked)
+    );
+  });
   document
     .querySelector('#dns-record-form select[name="type"]')
     ?.addEventListener("change", actions.syncDnsFormType);

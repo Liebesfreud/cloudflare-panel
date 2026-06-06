@@ -1,0 +1,30 @@
+.dns-bulk-panel {
+  margin-top: 18px;
+  padding: 24px 28px 26px;
+}
+
+.dns-bulk-field {
+  margin-top: 18px;
+}
+
+.dns-bulk-textarea {
+  min-height: 156px;
+  resize: vertical;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.dns-bulk-help {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.55;
+}

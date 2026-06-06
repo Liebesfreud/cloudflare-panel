@@ -8,7 +8,7 @@ export const automationSettingDefinitions = [
   {
     id: "ssl",
     key: "ssl",
-    fallback: "flexible",
+    fallback: "strict",
     values: new Set(["off", "flexible", "full", "strict"]),
   },
   {
@@ -309,7 +309,7 @@ export const automationPresetDefinitions = {
     label: "速度",
     settings: {
       security_level: "low",
-      ssl: "flexible",
+      ssl: "strict",
       cache_level: "aggressive",
       browser_cache_ttl: 31_536_000,
       polish: "lossless",

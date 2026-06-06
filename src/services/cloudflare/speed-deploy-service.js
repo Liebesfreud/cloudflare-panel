@@ -160,7 +160,7 @@ export class SpeedDeployService {
       fallbackOriginName,
       records
     );
-    const sslSetting = await this.setFlexibleSsl(config);
+    const sslSetting = await this.setStrictSsl(config);
     const fallbackOrigin = await this.setFallbackOrigin(config, fallbackOriginName);
     const customHostname = await this.ensureCustomHostname(config);
 
@@ -379,17 +379,17 @@ export class SpeedDeployService {
     });
   }
 
-  async setFlexibleSsl(config) {
+  async setStrictSsl(config) {
     const payload = await this.cloudflareClient.patch(
       `zones/${config.zoneId}/settings/ssl`,
       {
-        value: "flexible",
+        value: "strict",
       }
     );
 
     return {
       id: payload.result?.id || "ssl",
-      value: payload.result?.value || "flexible",
+      value: payload.result?.value || "strict",
       editable: payload.result?.editable !== false,
     };
   }

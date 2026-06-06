@@ -33,7 +33,7 @@ function renderWarnings() {
 }
 
 function renderModeOptions() {
-  const currentMode = settingValue("ssl", "flexible");
+  const currentMode = settingValue("ssl", "strict");
 
   return `
     <div class="ssl-mode-grid">

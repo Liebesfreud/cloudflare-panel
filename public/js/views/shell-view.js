@@ -52,9 +52,35 @@ function renderZoneNav() {
   `;
 }
 
+function renderAccountSelector() {
+  if (!state.cloudflareAccounts.length) {
+    return "";
+  }
+
+  const activeId = state.activeCloudflareAccountId || state.activeCloudflareAccount?.id || "";
+  const disabled = state.selectingCloudflareAccount || state.cloudflareAccounts.length <= 1;
+
+  return `
+    <label class="account-switcher" title="切换 Cloudflare 账号">
+      <span>${icon("key")}</span>
+      <select id="cloudflare-account-switch" ${disabled ? "disabled" : ""}>
+        ${state.cloudflareAccounts
+          .map(
+            (account) => `
+              <option value="${escapeHtml(account.id)}" ${account.id === activeId ? "selected" : ""}>
+                ${escapeHtml(account.name || account.email || account.id)}
+              </option>
+            `
+          )
+          .join("")}
+      </select>
+    </label>
+  `;
+}
+
 export function renderShell(content) {
   const app = document.querySelector("#app");
-  const accountLabel = state.sessionEmail || "Cloudflare Panel";
+  const accountLabel = state.activeCloudflareAccount?.email || state.sessionEmail || "Cloudflare Panel";
   app.className = "app-shell";
   app.innerHTML = `
     <aside class="sidebar">
@@ -80,7 +106,10 @@ export function renderShell(content) {
           <span class="topbar-icon">${icon("layout")}</span>
           <h1>${escapeHtml(topbarTitle(state.view, state.zoneSection, state.mainSection))}</h1>
         </div>
-        <button class="logout" type="button" id="logout-session">退出</button>
+        <div class="topbar-actions">
+          ${renderAccountSelector()}
+          <button class="logout" type="button" id="logout-session">退出</button>
+        </div>
       </header>
       ${content}
     </main>

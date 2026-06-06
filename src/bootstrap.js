@@ -6,8 +6,10 @@ import { CertificatesService } from "./services/cloudflare/certificates-service.
 import { DnsRecordsService } from "./services/cloudflare/dns-records-service.js";
 import { DeveloperResourcesService } from "./services/cloudflare/developer-resources-service.js";
 import { FirewallRulesService } from "./services/cloudflare/firewall-rules-service.js";
+import { CloudflareAccountService } from "./services/cloudflare-account-service.js";
 import { CredentialSessionService } from "./services/credential-session-service.js";
 import { OperationHistoryService } from "./services/operation-history-service.js";
+import { PanelAuthService } from "./services/panel-auth-service.js";
 import { PageRulesService } from "./services/cloudflare/page-rules-service.js";
 import { SpeedDeployService } from "./services/cloudflare/speed-deploy-service.js";
 import { SslSettingsService } from "./services/cloudflare/ssl-settings-service.js";
@@ -30,6 +32,9 @@ import { ZonesController } from "./controllers/zones-controller.js";
 import { createApp } from "./app.js";
 
 export function createContainer(config) {
+  const cloudflareAccountService = new CloudflareAccountService({
+    accounts: config.cloudflare.accounts,
+  });
   const cloudflareClient = new CloudflareClient({
     apiBaseUrl: config.cloudflare.apiBaseUrl,
     email: config.cloudflare.email,
@@ -80,6 +85,11 @@ export function createContainer(config) {
     ttlDays: config.session.ttlDays,
   });
   const operationHistoryService = new OperationHistoryService();
+  const panelAuthService = new PanelAuthService({
+    authSecret: config.auth.authSecret,
+    password: config.auth.password,
+    user: config.auth.user,
+  });
   const analyticsController = new AnalyticsController({ analyticsService });
   const automationController = new AutomationController({ automationService });
   const certificatesController = new CertificatesController({ certificatesService });
@@ -87,8 +97,10 @@ export function createContainer(config) {
   const dnsRecordsController = new DnsRecordsController({ dnsRecordsService });
   const cacheSettingsController = new CacheSettingsController({ cacheSettingsService });
   const credentialsController = new CredentialsController({
+    cloudflareAccountService,
     cloudflareClient,
     credentialSessionService,
+    panelAuthService,
   });
   const developerResourcesController = new DeveloperResourcesController({
     developerResourcesService,
@@ -108,6 +120,7 @@ export function createContainer(config) {
       automationController,
       cacheSettingsController,
       certificatesController,
+      cloudflareAccountService,
       cloudflareClient,
       credentialsController,
       credentialSessionService,
@@ -117,6 +130,7 @@ export function createContainer(config) {
       operationHistoryController,
       operationHistoryService,
       pageRulesController,
+      panelAuthService,
       speedDeployController,
       sslSettingsController,
       workersController,
@@ -130,6 +144,7 @@ export function createContainer(config) {
     cacheSettingsService,
     certificatesController,
     certificatesService,
+    cloudflareAccountService,
     cloudflareClient,
     credentialSessionService,
     credentialsController,
@@ -143,6 +158,7 @@ export function createContainer(config) {
     operationHistoryService,
     pageRulesController,
     pageRulesService,
+    panelAuthService,
     speedDeployController,
     speedDeployService,
     sslSettingsController,
