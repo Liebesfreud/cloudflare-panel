@@ -3167,3 +3167,31 @@ node --test test/smoke.test.js
   - 没有初始化口令不能获取 TOTP setup secret。
   - 已认证写操作缺少 CSRF token 返回 403。
   - SQLite 原始 `totp_secret` 和 `global_api_key` 列为 `enc:v1:` 密文，不等于明文。
+
+## 2026-06-06 移除 Pages 分支和 serverless 部署面
+
+用户要求把 `pages` 分支相关也移除，不再使用任何 serverless 方式部署。本轮把 GitHub Pages 部署配置、远端分支和本地静态产物一起清理，部署口径只保留 Docker。
+
+本次变更：
+
+- 关闭仓库 GitHub Pages：
+  - 通过 GitHub API 删除 `baize-projects/network` 的 Pages 配置。
+  - 原配置为 legacy Pages，source 指向 `pages` 分支根目录。
+- 删除远端 `pages` 分支：
+  - 执行 `git push origin --delete pages`，远端分支已删除成功。
+  - 后续仓库不再维护 `pages` 分支。
+- 清理本地 GitHub Pages 产物：
+  - 删除旧 `_site/` 静态构建目录。
+  - 删除空的 `api/` 和 `scripts/` 目录。
+  - `.gitignore` 移除 `_site/`，避免继续保留静态 Pages 构建语义。
+
+保留边界：
+
+- `public/js/views/developer-resources-view.js` 里的 Pages 表单属于 Cloudflare Pages 资源管理功能，不是 GitHub Pages 或 serverless 部署方式，因此保留。
+- `.github/workflows/docker-image.yml` 仍是唯一自动部署相关 workflow：推送后构建并上传 Docker 镜像。
+
+验证：
+
+- `gh api repos/baize-projects/network/pages` 删除前确认 Pages source 为 `pages` 分支。
+- `git push origin --delete pages` 删除远端分支成功。
+- 后续应通过 `git ls-remote --heads origin` 确认远端只剩 `main`。
