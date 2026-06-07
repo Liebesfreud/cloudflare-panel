@@ -143,24 +143,13 @@ function renderCloudflareSetupBody() {
   `;
 }
 
-function renderConnectBody() {
-  if (state.checkingSession) {
-    return `
-      <div class="connect-loading">
-        <div class="spinner"></div>
-        <strong>正在检查面板会话</strong>
-      </div>
-    `;
-  }
-
-  if (state.setupRequired) {
-    return state.setupStep === "cloudflare" ? renderCloudflareSetupBody() : renderAdminSetupBody();
-  }
+function renderLoginBody() {
+  const continuingSetup = state.setupRequired && state.setupStep === "cloudflare";
 
   return `
     <div class="connect-heading">
-      <h2>登录蜘蛛网络面板</h2>
-      <p>登录后即可选择已保存的 Cloudflare 账号</p>
+      <h2>${continuingSetup ? "登录并继续初始化" : "登录蜘蛛网络面板"}</h2>
+      <p>${continuingSetup ? "管理员账户已创建，请重新登录后添加 Cloudflare 账号。" : "登录后即可选择已保存的 Cloudflare 账号"}</p>
     </div>
 
     <form class="connect-card" id="cloudflare-connect-form">
@@ -184,7 +173,7 @@ function renderConnectBody() {
         <span>2FA 验证码</span>
         <input name="auth" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位动态验证码" />
       </label>
-      <p class="connect-help">如果是首次打开面板，会先进入初始化流程创建管理员账户和 Cloudflare 账号。</p>
+      <p class="connect-help">${continuingSetup ? "登录成功后会返回 Cloudflare 账号添加步骤。" : "如果是首次打开面板，会先进入初始化流程创建管理员账户和 Cloudflare 账号。"}</p>
 
       <div class="connect-security">
         <strong>安全保存方式</strong>
@@ -193,24 +182,51 @@ function renderConnectBody() {
       </div>
 
       <button class="primary-button connect-submit" type="submit" ${state.connectingSession ? "disabled" : ""}>
-        ${state.connectingSession ? "登录中..." : "登录并进入管理后台"}
+        ${state.connectingSession ? "登录中..." : continuingSetup ? "登录并继续添加账号" : "登录并进入管理后台"}
       </button>
       ${state.sessionError ? `<div class="notice error-notice">${escapeHtml(state.sessionError)}</div>` : ""}
     </form>
 
-    <div class="connect-register">
-      <span>还没有 Cloudflare 账号？</span>
-      <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noreferrer">立即注册</a>
-      <p>注册后，您可以免费使用 Cloudflare 的 CDN、DNS 和其他强大功能</p>
-    </div>
+    ${
+      continuingSetup
+        ? ""
+        : `<div class="connect-register">
+            <span>还没有 Cloudflare 账号？</span>
+            <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noreferrer">立即注册</a>
+            <p>注册后，您可以免费使用 Cloudflare 的 CDN、DNS 和其他强大功能</p>
+          </div>`
+    }
   `;
+}
+
+function renderConnectBody() {
+  if (state.checkingSession) {
+    return `
+      <div class="connect-loading">
+        <div class="spinner"></div>
+        <strong>正在检查面板会话</strong>
+      </div>
+    `;
+  }
+
+  if (state.setupRequired) {
+    if (state.setupStep === "admin") {
+      return renderAdminSetupBody();
+    }
+
+    if (state.sessionAuthenticated) {
+      return renderCloudflareSetupBody();
+    }
+  }
+
+  return renderLoginBody();
 }
 
 export function renderConnectView() {
   const app = document.querySelector("#app");
   app.className = "connect-root";
   const wrapClass =
-    state.setupRequired && state.setupStep === "cloudflare"
+    state.setupRequired && state.setupStep === "cloudflare" && state.sessionAuthenticated
       ? "connect-wrap setup-cloudflare-wrap"
       : "connect-wrap";
 

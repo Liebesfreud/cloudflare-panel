@@ -51,6 +51,8 @@ docker run -d \
 http://服务器IP:3000
 ```
 
+直接通过 HTTP 访问时保持 `SECURE_COOKIES=false`。放在 HTTPS 反向代理后时，建议配置 `PUBLIC_ORIGIN`，并在代理会覆盖和清洗转发头的前提下设置 `TRUST_PROXY_HEADERS=true`。
+
 首次打开会进入两页初始化流程：
 
 1. 查看容器日志中的 `Initial setup token` 提示。默认不会输出完整口令，需要进入容器读取 `/data/setup-token.txt`。

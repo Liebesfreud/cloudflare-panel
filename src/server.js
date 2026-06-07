@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 
 import { createContainer } from "./bootstrap.js";
 import { createConfig } from "./config/env.js";
@@ -26,6 +27,10 @@ export function startServer({ config = createConfig(), logger = console } = {}) 
   return server;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export function isMainModule(moduleUrl, entryPath = process.argv[1]) {
+  return Boolean(entryPath && moduleUrl === pathToFileURL(entryPath).href);
+}
+
+if (isMainModule(import.meta.url)) {
   startServer({ config: createConfig() });
 }

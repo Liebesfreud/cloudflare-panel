@@ -8,6 +8,7 @@ import {
   fetchSessionStatus,
 } from "../public/js/api.js";
 import { state } from "../public/js/state.js";
+import { renderConnectView } from "../public/js/views/connect-view.js";
 
 function htmlResponse() {
   return new Response("<!doctype html><html><body>Static HTML fallback</body></html>", {
@@ -170,6 +171,126 @@ test("manual login still tells static HTML users that the Node backend is missin
     assert.equal(state.connected, false);
     assert.match(state.sessionError, /Node\.js 后端/);
     assert.equal(renderCount, 2);
+  } finally {
+    global.document = previousDocument;
+    global.fetch = previousFetch;
+    global.FormData = previousFormData;
+  }
+});
+
+test("incomplete Cloudflare setup renders an administrator login when the session is missing", () => {
+  const previousDocument = global.document;
+  const app = { className: "", innerHTML: "" };
+  const previousState = {
+    checkingSession: state.checkingSession,
+    sessionAuthenticated: state.sessionAuthenticated,
+    sessionError: state.sessionError,
+    setupRequired: state.setupRequired,
+    setupStep: state.setupStep,
+  };
+
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#app");
+      return app;
+    },
+  };
+  state.checkingSession = false;
+  state.sessionAuthenticated = false;
+  state.sessionError = "";
+  state.setupRequired = true;
+  state.setupStep = "cloudflare";
+
+  try {
+    renderConnectView();
+
+    assert.match(app.innerHTML, /登录并继续初始化/);
+    assert.match(app.innerHTML, /id="cloudflare-connect-form"/);
+    assert.doesNotMatch(app.innerHTML, /id="cloudflare-accounts-setup-form"/);
+  } finally {
+    Object.assign(state, previousState);
+    global.document = previousDocument;
+  }
+});
+
+test("administrator login resumes incomplete Cloudflare setup without loading zones", async () => {
+  const previousDocument = global.document;
+  const previousFetch = global.fetch;
+  const previousFormData = global.FormData;
+  const requestedUrls = [];
+  let loadZonesCalled = false;
+
+  global.FormData = class TestFormData {
+    constructor(form) {
+      this.form = form;
+    }
+
+    get(name) {
+      return this.form.values[name];
+    }
+  };
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#cloudflare-connect-form");
+      return {
+        values: {
+          auth: "123456",
+          password: "panel-password",
+          user: "operator",
+        },
+      };
+    },
+  };
+  global.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    return new Response(
+      JSON.stringify({
+        accounts: [],
+        activeCloudflareAccount: null,
+        authenticated: true,
+        csrfToken: "setup-csrf-token",
+        email: "",
+        expiresAt: "2026-07-07T00:00:00.000Z",
+        hasCredentials: false,
+        loginRequired: true,
+        setupRequired: true,
+        setupState: {
+          cloudflareAccountRequired: true,
+          panelUserRequired: false,
+          setupRequired: true,
+        },
+        source: "cookie",
+      }),
+      {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        status: 200,
+      }
+    );
+  };
+
+  state.connected = false;
+  state.connectingSession = false;
+  state.sessionAuthenticated = false;
+  state.sessionError = "";
+  state.setupRequired = true;
+  state.setupStep = "cloudflare";
+
+  const actions = createSessionActions({
+    async loadZones() {
+      loadZonesCalled = true;
+    },
+    renderApp() {},
+  });
+
+  try {
+    await actions.connectSession({ preventDefault() {} });
+
+    assert.deepEqual(requestedUrls, ["/api/session/connect", "/api/session/status"]);
+    assert.equal(loadZonesCalled, false);
+    assert.equal(state.connected, false);
+    assert.equal(state.sessionAuthenticated, true);
+    assert.equal(state.setupRequired, true);
+    assert.equal(state.setupStep, "cloudflare");
   } finally {
     global.document = previousDocument;
     global.fetch = previousFetch;

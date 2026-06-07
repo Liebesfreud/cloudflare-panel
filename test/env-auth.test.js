@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createConfig } from "../src/config/env.js";
+import { isMainModule } from "../src/server.js";
 import { PanelAuthService, generateTotpSecret } from "../src/services/panel-auth-service.js";
 import { PersistentSecretService } from "../src/services/persistent-secret-service.js";
 import { SetupGuardService } from "../src/services/setup-guard-service.js";
@@ -61,6 +62,26 @@ test("createConfig exposes explicit production hardening switches", () => {
   assert.equal(config.features.d1SqlConsoleEnabled, true);
   assert.equal(config.server.publicOrigin, "https://panel.example.com");
   assert.equal(config.server.trustProxyHeaders, true);
+});
+
+test("createConfig honors explicit secure cookie settings in production", () => {
+  const httpConfig = createConfig({
+    NODE_ENV: "production",
+    SECURE_COOKIES: "false",
+  });
+  const httpsConfig = createConfig({
+    NODE_ENV: "production",
+    SECURE_COOKIES: "true",
+  });
+
+  assert.equal(httpConfig.server.secureCookies, false);
+  assert.equal(httpsConfig.server.secureCookies, true);
+});
+
+test("server entry detection supports paths containing non-ASCII characters", () => {
+  const entryPath = "/tmp/氛围编程/cloudflare-panel/src/server.js";
+
+  assert.equal(isMainModule("file:///tmp/%E6%B0%9B%E5%9B%B4%E7%BC%96%E7%A8%8B/cloudflare-panel/src/server.js", entryPath), true);
 });
 
 test("PersistentSecretService can read encryption material outside DATA_DIR", async () => {

@@ -23,9 +23,7 @@ export class CredentialsController {
     const setupState = this.panelAuthService.getSetupState();
     const panelLoginConfigured = this.panelAuthService.isConfigured();
     const hasCloudflareAccounts = this.cloudflareAccountService.hasAccounts();
-    const authenticated = setupState.setupRequired
-      ? false
-      : Boolean(sessionCredentials?.authenticated);
+    const authenticated = panelLoginConfigured && Boolean(sessionCredentials?.authenticated);
     const activeCloudflareAccountId = this.cloudflareAccountService.resolveSelectedAccountId(
       sessionCredentials?.activeCloudflareAccountId
     );
@@ -272,12 +270,13 @@ export class CredentialsController {
     const password = String(body.password || "");
     const auth = String(body.auth || body.authCode || body.totp || "").trim();
     const activeCloudflareAccountId = String(body.cloudflareAccountId || "").trim();
+    const setupState = this.panelAuthService.getSetupState();
 
-    if (this.panelAuthService.getSetupState().setupRequired) {
+    if (setupState.panelUserRequired) {
       return {
         statusCode: 412,
         body: {
-          error: "请先完成首次初始化。",
+          error: "请先创建管理员账户并完成首次初始化。",
         },
       };
     }
@@ -307,15 +306,7 @@ export class CredentialsController {
     }
 
     this.resetRateLimit(request, `login:${user}`);
-    if (!this.cloudflareAccountService.hasAccounts()) {
-      return {
-        statusCode: 412,
-        body: {
-          error: "请先完成首次初始化并添加 Cloudflare 账号。",
-        },
-      };
-    }
-
+    const hasCloudflareAccounts = this.cloudflareAccountService.hasAccounts();
     const selectedAccountId =
       this.cloudflareAccountService.resolveSelectedAccountId(activeCloudflareAccountId);
     const session = this.credentialSessionService.create({
@@ -337,9 +328,10 @@ export class CredentialsController {
         csrfToken: session.csrfToken,
         email: activeCloudflareAccount?.email || "",
         expiresAt: session.expiresAt,
-        hasCredentials: true,
+        hasCredentials: hasCloudflareAccounts,
         loginRequired: true,
-        setupRequired: false,
+        setupRequired: setupState.setupRequired,
+        setupState,
         source: "cookie",
       },
     };

@@ -25,7 +25,7 @@ export function createConfig(env = process.env) {
     server: {
       port: parsePort(env.PORT, 3000),
       publicOrigin: env.PUBLIC_ORIGIN || "",
-      secureCookies: env.NODE_ENV === "production" || env.SECURE_COOKIES === "true",
+      secureCookies: env.SECURE_COOKIES === "true",
       trustProxyHeaders: env.TRUST_PROXY_HEADERS === "true",
     },
     cloudflare: {

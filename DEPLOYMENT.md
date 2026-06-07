@@ -99,12 +99,12 @@ docker compose logs -f
 
 ## HTTPS 与 Cookie
 
-`NODE_ENV=production` 时会话 Cookie 默认带 `Secure`。如果直接用 HTTP 访问生产容器，浏览器可能无法保存登录 Cookie。
+`SECURE_COOKIES=true` 时会话 Cookie 固定带 `Secure`。设置 `TRUST_PROXY_HEADERS=true` 后，经可信反向代理转发且 `X-Forwarded-Proto=https` 的请求也会自动使用 `Secure` Cookie。
 
 推荐做法：
 
 - 生产环境：放在 HTTPS 反向代理后，设置 `PUBLIC_ORIGIN=https://你的域名`，并且只有反向代理会覆盖和清洗 `Host`、`X-Forwarded-Proto` 时才设置 `TRUST_PROXY_HEADERS=true`。
-- 本机调试：显式设置 `SECURE_COOKIES=false`。
+- 直接通过 `http://IP:端口` 访问：保持 `SECURE_COOKIES=false`，否则浏览器不会保存登录 Cookie。
 
 Nginx 示例：
 

@@ -455,14 +455,43 @@ test("initializes admin first and then saves multiple Cloudflare accounts", asyn
     assert.equal(adminPayload.setupState.cloudflareAccountRequired, true);
     assert.match(sessionCookie, /cf_panel_session=/);
 
+    const unauthenticatedStatusResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/status`
+    );
+    const unauthenticatedStatusPayload = await unauthenticatedStatusResponse.json();
+    const recoveryLoginResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/connect`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auth: makeTotp(secretPayload.secret),
+          password: "strong-password",
+          user: "operator",
+        }),
+      }
+    );
+    const recoveryLoginPayload = await recoveryLoginResponse.json();
+    const recoverySessionCookie =
+      recoveryLoginResponse.headers.get("set-cookie")?.split(";")[0] || "";
+
+    assert.equal(unauthenticatedStatusPayload.authenticated, false);
+    assert.equal(unauthenticatedStatusPayload.setupRequired, true);
+    assert.equal(recoveryLoginResponse.status, 200);
+    assert.equal(recoveryLoginPayload.authenticated, true);
+    assert.equal(recoveryLoginPayload.hasCredentials, false);
+    assert.equal(recoveryLoginPayload.setupRequired, true);
+    assert.equal(recoveryLoginPayload.setupState.panelUserRequired, false);
+    assert.match(recoverySessionCookie, /cf_panel_session=/);
+
     const accountsResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/setup/cloudflare-accounts`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: sessionCookie,
-          "X-CSRF-Token": adminPayload.csrfToken,
+          Cookie: recoverySessionCookie,
+          "X-CSRF-Token": recoveryLoginPayload.csrfToken,
         },
         body: JSON.stringify({
           accounts: [

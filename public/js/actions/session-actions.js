@@ -180,8 +180,15 @@ export function createSessionActions({ loadZones, renderApp }) {
         throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新登录。");
       }
 
-      state.connected = true;
       applySession(session);
+
+      if (session.setupRequired) {
+        state.connected = false;
+        state.setupStep = session.setupState?.panelUserRequired ? "admin" : "cloudflare";
+        return;
+      }
+
+      state.connected = true;
       state.mainSection = "domain";
       await loadZones({ throwOnError: true });
     } catch (error) {
@@ -244,7 +251,7 @@ export function createSessionActions({ loadZones, renderApp }) {
     renderApp();
 
     try {
-      const session = await createSetupAdmin({
+      const setupSession = await createSetupAdmin({
         password: setup.password,
         setupToken: setup.setupToken,
         totpCode: setup.totpCode,
@@ -252,8 +259,14 @@ export function createSessionActions({ loadZones, renderApp }) {
         username: setup.username,
       });
 
-      if (!session.authenticated) {
+      if (!setupSession.authenticated) {
         throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新初始化。");
+      }
+
+      const session = await fetchSessionStatus();
+
+      if (!session.authenticated) {
+        throw new Error("浏览器未能保存登录 Cookie，请检查 SECURE_COOKIES 或 HTTPS 配置后重新登录。");
       }
 
       applySession(session);
@@ -266,6 +279,13 @@ export function createSessionActions({ loadZones, renderApp }) {
       state.connected = false;
       state.zoneError = "";
       state.sessionError = error.message;
+
+      try {
+        applySession(await fetchSessionStatus());
+        state.sessionError = error.message;
+      } catch {
+        // Preserve the original setup error when session recovery is unavailable.
+      }
     } finally {
       state.setupSubmitting = false;
       renderApp();
@@ -310,6 +330,13 @@ export function createSessionActions({ loadZones, renderApp }) {
       state.connected = false;
       state.zoneError = "";
       state.sessionError = error.message;
+
+      try {
+        applySession(await fetchSessionStatus());
+        state.sessionError = error.message;
+      } catch {
+        // Preserve the original setup error when session recovery is unavailable.
+      }
     } finally {
       state.setupSubmitting = false;
       renderApp();
