@@ -3328,3 +3328,21 @@ node --test test/smoke.test.js
 - 截图来自 `127.0.0.1:3138` 隔离 mock 面板。
 - mock 页面使用 `demo@example.com`、`100222.xyz`、`saas.sin.fan` 等演示数据。
 - 截图文件实际为 JPEG 格式，扩展名使用 `.jpg`。
+
+## 2026-06-07 Worker 优选截图错位修复
+
+用户反馈 README / 博客引用的 Worker 优选截图里，“添加优选”按钮相对输入框下沉错位。
+
+本次变更：
+
+- `public/js/views/workers/domain-manager-view.js`：将 Worker 优选提交按钮包进独立 `.workers-preferred-action` 动作列。
+- `public/css/features/workers.css`：
+  - `.workers-preferred-form` 从底部对齐改为顶部对齐。
+  - 动作列保留与表单标题同高的占位行，让按钮与输入框本体顶边对齐。
+  - 窄屏下隐藏占位行，按钮恢复自然左对齐，避免移动端空白。
+- 重新生成 `docs/screenshots/workers-preferred-route.jpg`，保持原 `1280x720` 尺寸和 `.jpg` 路径，外部 Markdown 引用不用变。
+
+验证：
+
+- 浏览器实际测量：访问域名输入框、优选域名输入框和“添加优选”按钮 top 坐标一致，`verticalDelta = 0`。
+- 使用本地静态演示页生成截图，不连接真实 Cloudflare API，不写入真实账号或 Global API Key。

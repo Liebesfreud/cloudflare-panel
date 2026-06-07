@@ -572,8 +572,21 @@
 .workers-preferred-form {
   display: grid;
   grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(180px, 240px) auto;
-  align-items: end;
+  align-items: start;
   gap: 8px;
+}
+
+.workers-preferred-action {
+  display: grid;
+  gap: 5px;
+}
+
+.workers-preferred-action > span {
+  height: 16px;
+}
+
+.workers-preferred-action .workers-primary-button {
+  width: 100%;
 }
 
 .workers-route-preview {
@@ -644,5 +657,14 @@
   .workers-binding-form,
   .workers-preferred-form {
     grid-template-columns: 1fr;
+  }
+
+  .workers-preferred-action > span {
+    display: none;
+  }
+
+  .workers-preferred-action .workers-primary-button {
+    justify-self: start;
+    width: auto;
   }
 }

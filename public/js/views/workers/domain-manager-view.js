@@ -121,9 +121,12 @@ function renderPreferredRoutePanel() {
           <input name="preferredHostname" value="${escapeHtml(preferredHostname)}" placeholder="${defaultPreferredHostname}" ${!zone ? "disabled" : ""} />
           <small>DNS CNAME 指向这里，默认不开启代理</small>
         </label>
-        <button class="workers-primary-button" type="submit" ${!zone || pending ? "disabled" : ""}>
-          ${pending ? "添加中..." : "添加优选"}
-        </button>
+        <div class="workers-preferred-action">
+          <span aria-hidden="true"></span>
+          <button class="workers-primary-button" type="submit" ${!zone || pending ? "disabled" : ""}>
+            ${pending ? "添加中..." : "添加优选"}
+          </button>
+        </div>
       </form>
       <div class="workers-route-preview">
         <span>路由模式</span>
