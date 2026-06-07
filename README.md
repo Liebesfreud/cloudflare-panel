@@ -256,6 +256,16 @@ test/                                  # Node test 测试
 node --test test/**/*.test.js
 ```
 
+## Docker 镜像
+
+推送到 `main` 或创建 `v*` 标签后，GitHub Actions 会自动构建 `linux/amd64`、`linux/arm64` 镜像并发布到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/liebesfreud/cloudflare-panel:latest
+```
+
+首次发布后，如需匿名拉取，请在 GitHub Packages 中把容器包可见性设置为 `Public`。
+
 ## 安全说明
 
 浏览器只保存最长 30 天的 HttpOnly 随机会话 Cookie。所有状态修改接口要求 CSRF token；静态页和 JSON 响应带 CSP、`X-Frame-Options`、`nosniff` 等安全头。Cookie、localStorage、sessionStorage、接口响应和操作历史都不保存 Cloudflare Global API Key、管理员密码或 2FA 密钥。
