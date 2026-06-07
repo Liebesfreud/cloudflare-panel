@@ -3305,3 +3305,26 @@ node --test test/smoke.test.js
   - 访问域名不属于所选 zone 时返回 400，且不写 Cloudflare route/DNS。
   - DNS 同名 A 记录冲突时返回 409，并回滚新建路由。
   - 前端 Workers 渲染测试断言出现 `Worker 优选` 和 `saas.sin.fan`。
+
+## 2026-06-07 README 界面截图
+
+用户要求截几张图放进 README。本次使用本地隔离 mock 面板生成截图，不使用真实 Cloudflare 账号、Global API Key 或真实域名数据。
+
+本次变更：
+
+- 新增 `docs/screenshots/`：
+  - `domain-list.jpg`
+  - `dns-records.jpg`
+  - `speed-deploy.jpg`
+  - `workers-preferred-route.jpg`
+- `README.md` 在功能列表后新增“界面预览”章节，展示：
+  - 域名列表
+  - DNS 记录
+  - 一键加速
+  - Worker 优选
+
+验证：
+
+- 截图来自 `127.0.0.1:3138` 隔离 mock 面板。
+- mock 页面使用 `demo@example.com`、`100222.xyz`、`saas.sin.fan` 等演示数据。
+- 截图文件实际为 JPEG 格式，扩展名使用 `.jpg`。

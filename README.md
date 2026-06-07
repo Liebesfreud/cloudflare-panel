@@ -14,6 +14,26 @@
 - Workers 与开发资源：管理 Workers、Pages、D1、R2、KV、Cloudflare Tunnels 和 Worker 模板库。
 - 操作历史：记录管理操作结果，不记录请求体、密码、2FA 密钥或 Global API Key。
 
+## 界面预览
+
+截图使用本地 mock 数据生成，不包含真实 Cloudflare 账号或 API Key。
+
+### 域名列表
+
+![域名列表](./docs/screenshots/domain-list.jpg)
+
+### DNS 记录
+
+![DNS 记录](./docs/screenshots/dns-records.jpg)
+
+### 一键加速
+
+![一键加速](./docs/screenshots/speed-deploy.jpg)
+
+### Worker 优选
+
+![Worker 优选](./docs/screenshots/workers-preferred-route.jpg)
+
 ## Docker 运行
 
 ```bash
